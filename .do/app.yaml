@@ -1,0 +1,13 @@
+name: retain-dictionary
+region: nyc
+static_sites:
+  - name: retain
+    github:
+      repo: Roahn333singh/Dictionary-App
+      branch: main
+      deploy_on_push: true
+    build_command: npm run build
+    output_dir: dist
+    index_document: index.html
+    catchall_document: index.html
+    environment_slug: node-js
