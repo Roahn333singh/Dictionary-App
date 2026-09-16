@@ -61,18 +61,17 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^https:\/\/api\.dictionaryapi\.dev\/.*/i,
-            handler: 'NetworkFirst',
+            urlPattern:
+              /^https:\/\/(en\.wiktionary\.org|api\.datamuse\.com|en\.wikipedia\.org|api\.mymemory\.translated\.net|translate\.googleapis\.com)\/.*/i,
+            handler: 'NetworkOnly',
             options: {
               cacheName: 'dictionary-cache',
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              networkTimeoutSeconds: 8,
             },
           },
         ],
       },
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
     }),
   ],
