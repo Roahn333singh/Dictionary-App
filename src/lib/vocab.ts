@@ -34,35 +34,61 @@ function normalizeWord(raw: Partial<VocabWord> & { sentence?: string }): VocabWo
     merged[1] ?? merged[0] ?? '',
   ]
 
+  const nowIso = new Date().toISOString()
   return {
-    id: raw.id ?? crypto.randomUUID(),
-    word: raw.word ?? '',
-    meaning: raw.meaning ?? '',
-    meaningHi: raw.meaningHi ?? '',
+    id: str(raw.id) || crypto.randomUUID(),
+    word: str(raw.word),
+    meaning: str(raw.meaning),
+    meaningHi: str(raw.meaningHi),
     examples,
-    notes: raw.notes ?? '',
-    phonetic: raw.phonetic ?? '',
-    partOfSpeech: raw.partOfSpeech ?? '',
-    createdAt: raw.createdAt ?? new Date().toISOString(),
-    updatedAt: raw.updatedAt ?? new Date().toISOString(),
-    nextReviewAt: raw.nextReviewAt ?? new Date().toISOString(),
-    intervalDays: raw.intervalDays ?? 0,
-    easeFactor: raw.easeFactor ?? 2.5,
-    repetitions: raw.repetitions ?? 0,
-    lapses: raw.lapses ?? 0,
+    notes: str(raw.notes),
+    phonetic: str(raw.phonetic),
+    partOfSpeech: str(raw.partOfSpeech),
+    createdAt: isoOr(raw.createdAt, nowIso),
+    updatedAt: isoOr(raw.updatedAt, nowIso),
+    nextReviewAt: isoOr(raw.nextReviewAt, nowIso),
+    intervalDays: num(raw.intervalDays, 0, 0),
+    easeFactor: num(raw.easeFactor, 2.5, 1.3),
+    repetitions: Math.round(num(raw.repetitions, 0, 0)),
+    lapses: Math.round(num(raw.lapses, 0, 0)),
   }
 }
 
+function str(value: unknown): string {
+  return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : ''
+}
+
+function num(value: unknown, fallback: number, min: number): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? Math.max(min, n) : fallback
+}
+
+function isoOr(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  return Number.isNaN(new Date(value).getTime()) ? fallback : value
+}
+
+export function sanitizeWords(words: unknown[]): VocabWord[] {
+  const seen = new Set<string>()
+  const out: VocabWord[] = []
+  for (const w of words) {
+    if (!w || typeof w !== 'object') continue
+    const word = normalizeWord(w as VocabWord & { sentence?: string })
+    if (!word.word.trim() || seen.has(word.id)) continue
+    seen.add(word.id)
+    out.push(word)
+  }
+  return out
+}
+
 function parseData(parsed: Partial<AppData> | null): AppData {
-  if (!parsed) return defaultData()
+  if (!parsed || typeof parsed !== 'object') return defaultData()
   return {
-    words: Array.isArray(parsed.words)
-      ? parsed.words.map((w) => normalizeWord(w as VocabWord & { sentence?: string }))
-      : [],
+    words: Array.isArray(parsed.words) ? sanitizeWords(parsed.words) : [],
     stats: {
-      streak: parsed.stats?.streak ?? 0,
-      lastReviewDate: parsed.stats?.lastReviewDate ?? null,
-      totalReviews: parsed.stats?.totalReviews ?? 0,
+      streak: Math.round(num(parsed.stats?.streak, 0, 0)),
+      lastReviewDate: typeof parsed.stats?.lastReviewDate === 'string' ? parsed.stats.lastReviewDate : null,
+      totalReviews: Math.round(num(parsed.stats?.totalReviews, 0, 0)),
     },
   }
 }
@@ -74,8 +100,8 @@ export function loadUserStore(userId: string): UserStore {
     const parsed = JSON.parse(raw) as Partial<UserStore>
     return {
       ...parseData(parsed),
-      dirty: parsed.dirty && typeof parsed.dirty === 'object' ? parsed.dirty : {},
-      deleted: Array.isArray(parsed.deleted) ? parsed.deleted : [],
+      dirty: parsed.dirty && typeof parsed.dirty === 'object' && !Array.isArray(parsed.dirty) ? parsed.dirty : {},
+      deleted: Array.isArray(parsed.deleted) ? parsed.deleted.filter((id) => typeof id === 'string') : [],
       statsDirty: Boolean(parsed.statsDirty),
     }
   } catch {

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { setShareUser } from '../hooks/useShares'
 import { setActiveUser, useSyncState } from '../hooks/useVocab'
 import { SignIn } from '../pages/SignIn'
 
@@ -23,7 +24,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [waitedTooLong, setWaitedTooLong] = useState(false)
 
   useLayoutEffect(() => {
-    if (!loading) setActiveUser(userId)
+    if (loading) return
+    setActiveUser(userId)
+    setShareUser(userId)
   }, [loading, userId])
 
   useEffect(() => {

@@ -37,7 +37,7 @@ export function SignIn() {
           <span className="brand-name">Retain</span>
         </div>
         <h1 className="hero-title auth-title">
-          Words you meet. <em>Words you keep.</em>
+          Words you meet. <span className="highlight">Words you keep.</span>
         </h1>
 
         {isSupabaseConfigured ? (
@@ -112,8 +112,7 @@ export function SignIn() {
         ) : (
           <p className="auth-sub">
             Setup needed: add <code>VITE_SUPABASE_URL</code> and{' '}
-            <code>VITE_SUPABASE_ANON_KEY</code> to <code>.env.local</code> (or the
-            DigitalOcean build environment), then rebuild.
+            <code>VITE_SUPABASE_ANON_KEY</code> to <code>.env.local</code>, then rebuild.
           </p>
         )}
       </div>

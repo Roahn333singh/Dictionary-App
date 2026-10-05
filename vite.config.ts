@@ -13,8 +13,8 @@ export default defineConfig({
         short_name: 'Retain',
         description:
           'Capture English words with Hindi meanings and revise them so they stick when you speak.',
-        theme_color: '#0A1628',
-        background_color: '#07101C',
+        theme_color: '#101014',
+        background_color: '#101014',
         display: 'standalone',
         orientation: 'portrait-primary',
         start_url: '/',

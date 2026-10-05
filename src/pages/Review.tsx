@@ -36,8 +36,10 @@ export function Review() {
     }
   }, [current])
 
+  const examples = current ? current.examples.filter((e, i, all) => e && all.indexOf(e) === i) : []
+
   function rate(rating: ReviewRating) {
-    if (!current) return
+    if (!current || !revealed) return
     reviewWord(current.id, rating)
     setSessionDone((n) => n + 1)
     setRevealed(false)
@@ -50,13 +52,14 @@ export function Review() {
     return (
       <div className="review-stage">
         <div className="done-panel">
-          <h2>{sessionDone > 0 ? 'Fresh again.' : 'All clear.'}</h2>
+          <div className="empty-emoji" aria-hidden>{sessionDone > 0 ? '🔥' : '✨'}</div>
+          <h2>{sessionDone > 0 ? 'Brain = fed.' : 'All clear.'}</h2>
           <p>
             {sessionDone > 0
               ? `You revised ${sessionDone} word${sessionDone === 1 ? '' : 's'}. Come back when the next batch is due — consistency beats cramming.`
               : 'Nothing is due right now. Capture a new word, or check your library.'}
           </p>
-          <div className="cta-row" style={{ justifyContent: 'center' }}>
+          <div className="cta-row cta-center">
             <Link className="btn btn-primary" to="/add">
               Add a word
             </Link>
@@ -71,9 +74,9 @@ export function Review() {
 
   return (
     <div className="review-stage">
-      <div className="page-head" style={{ marginBottom: '1rem' }}>
-        <h1>Review</h1>
-        <p>Recall the English and Hindi meaning, then check the example sentences.</p>
+      <div className="page-head">
+        <p className="eyebrow">Review time</p>
+        <h1>Do you know it?</h1>
       </div>
 
       <div className="review-progress">
@@ -112,14 +115,12 @@ export function Review() {
                 <p className="hindi-text">{current.meaningHi}</p>
               </div>
             )}
-            <div className="reveal-block sentence">
-              <h3>Example 1</h3>
-              <p>“{current.examples[0]}”</p>
-            </div>
-            <div className="reveal-block sentence">
-              <h3>Example 2</h3>
-              <p>“{current.examples[1]}”</p>
-            </div>
+            {examples.map((ex, i) => (
+              <div key={i} className="reveal-block sentence">
+                <h3>Example {i + 1}</h3>
+                <p>“{ex}”</p>
+              </div>
+            ))}
             {current.notes && (
               <div className="reveal-block">
                 <h3>Notes</h3>
@@ -133,19 +134,23 @@ export function Review() {
 
       {revealed && intervals && (
         <div className="rating-row">
-          <button className="btn btn-coral" type="button" onClick={() => rate('again')}>
+          <button className="btn rate-btn rate-again" type="button" onClick={() => rate('again')}>
+            <span className="rate-emoji" aria-hidden>😵‍💫</span>
             Again
             <small>{intervals.again}</small>
           </button>
-          <button className="btn btn-sky" type="button" onClick={() => rate('hard')}>
+          <button className="btn rate-btn rate-hard" type="button" onClick={() => rate('hard')}>
+            <span className="rate-emoji" aria-hidden>😬</span>
             Hard
             <small>{intervals.hard}</small>
           </button>
-          <button className="btn btn-mint" type="button" onClick={() => rate('good')}>
+          <button className="btn rate-btn rate-good" type="button" onClick={() => rate('good')}>
+            <span className="rate-emoji" aria-hidden>🙂</span>
             Good
             <small>{intervals.good}</small>
           </button>
-          <button className="btn btn-gold" type="button" onClick={() => rate('easy')}>
+          <button className="btn rate-btn rate-easy" type="button" onClick={() => rate('easy')}>
+            <span className="rate-emoji" aria-hidden>😎</span>
             Easy
             <small>{intervals.easy}</small>
           </button>

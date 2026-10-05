@@ -17,7 +17,7 @@ A simple, modern English vocabulary app for words you actually want to use when 
 ### 1. Create the database
 
 1. Create a free project at [supabase.com](https://supabase.com) (region **Mumbai** is fastest for India).
-2. Open **SQL Editor → New query**, paste [`supabase/schema.sql`](supabase/schema.sql), and click **Run**.
+2. Open **SQL Editor → New query**, paste [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. Then do the same with [`supabase/sharing.sql`](supabase/sharing.sql) to turn on sharing words with friends.
 
 Row-level security in that file guarantees each user can only read and write their own words.
 

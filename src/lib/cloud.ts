@@ -1,5 +1,6 @@
 import type { AppStats, VocabWord } from '../types'
 import { supabase } from './supabase'
+import { sanitizeWords } from './vocab'
 
 type WordRow = {
   id: string
@@ -80,7 +81,7 @@ export async function fetchWords(): Promise<VocabWord[]> {
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data as WordRow[]).map(rowToWord)
+  return sanitizeWords((data as WordRow[]).map(rowToWord))
 }
 
 export async function upsertWords(words: VocabWord[], userId: string): Promise<void> {
@@ -107,6 +108,121 @@ export async function fetchStats(): Promise<AppStats | null> {
     lastReviewDate: row.last_review_date ?? null,
     totalReviews: row.total_reviews ?? 0,
   }
+}
+
+export type Friend = { userId: string; name: string }
+
+export type SharedWordPayload = {
+  meaning: string
+  meaningHi: string
+  examples: [string, string]
+  phonetic: string
+  partOfSpeech: string
+}
+
+export type Share = {
+  id: string
+  fromUser: string
+  word: string
+  payload: SharedWordPayload
+  note: string
+  createdAt: string
+}
+
+type ShareRow = {
+  id: string
+  from_user: string
+  to_user: string
+  word: string
+  payload: unknown
+  note: string | null
+  created_at: string
+}
+
+const text = (value: unknown, max: number) =>
+  typeof value === 'string' ? value.trim().slice(0, max) : ''
+
+function parsePayload(raw: unknown): SharedWordPayload {
+  const p = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const examples = Array.isArray(p.examples) ? p.examples.map((e) => text(e, 400)).filter(Boolean) : []
+  return {
+    meaning: text(p.meaning, 600),
+    meaningHi: text(p.meaningHi, 600),
+    examples: [examples[0] ?? '', examples[1] ?? ''],
+    phonetic: text(p.phonetic, 80),
+    partOfSpeech: text(p.partOfSpeech, 30),
+  }
+}
+
+export async function fetchFriends(myId: string): Promise<Friend[]> {
+  const { data, error } = await client().from('profiles').select('user_id, name').order('name')
+  if (error) throw error
+  return (data as { user_id: string; name: string }[])
+    .filter((p) => p.user_id !== myId && p.name)
+    .map((p) => ({ userId: p.user_id, name: p.name }))
+}
+
+export async function fetchInbox(myId: string): Promise<Share[]> {
+  const { data, error } = await client()
+    .from('shares')
+    .select('id, from_user, to_user, word, payload, note, created_at')
+    .eq('to_user', myId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return (data as ShareRow[])
+    .filter((r) => typeof r.word === 'string' && r.word.trim())
+    .map((r) => ({
+      id: r.id,
+      fromUser: r.from_user,
+      word: r.word.trim().slice(0, 80),
+      payload: parsePayload(r.payload),
+      note: text(r.note, 200),
+      createdAt: r.created_at,
+    }))
+}
+
+export type SendResult = { userId: string; ok: boolean; alreadyShared?: boolean }
+
+export async function sendShare(
+  word: VocabWord,
+  toUserIds: string[],
+  myId: string,
+  note: string,
+): Promise<SendResult[]> {
+  const payload: SharedWordPayload = {
+    meaning: word.meaning.slice(0, 600),
+    meaningHi: word.meaningHi.slice(0, 600),
+    examples: [word.examples[0].slice(0, 400), word.examples[1].slice(0, 400)],
+    phonetic: word.phonetic.slice(0, 80),
+    partOfSpeech: word.partOfSpeech.slice(0, 30),
+  }
+  const targets = [...new Set(toUserIds)].filter((id) => id !== myId)
+  const results = await Promise.allSettled(
+    targets.map(async (toUser) => {
+        const { error } = await client().from('shares').insert({
+          from_user: myId,
+          to_user: toUser,
+          word: word.word.trim().slice(0, 80),
+          payload,
+          note: note.trim().slice(0, 200),
+        })
+        if (error) {
+          if (error.code === '23505') return { userId: toUser, ok: true, alreadyShared: true }
+          throw error
+        }
+        return { userId: toUser, ok: true }
+    }),
+  )
+  return results.map((r, i) =>
+    r.status === 'fulfilled' ? r.value : { userId: targets[i], ok: false },
+  )
+}
+
+export async function setShareStatus(id: string, status: 'added' | 'dismissed'): Promise<void> {
+  const { error } = await client().from('shares').update({ status }).eq('id', id)
+  if (error) throw error
 }
 
 export async function upsertStats(stats: AppStats, userId: string): Promise<void> {

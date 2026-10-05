@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useVocab } from '../hooks/useVocab'
+import { LIMITS, useVocab } from '../hooks/useVocab'
 import { enrichWord } from '../lib/enrich'
 import type { WordEnrichment } from '../types'
 
@@ -14,6 +14,10 @@ export function AddWord() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [isManual, setIsManual] = useState(false)
+  const lookupSeq = useRef(0)
+  const navTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(navTimer.current), [])
 
   function findExisting(value: string) {
     const key = value.trim().toLowerCase()
@@ -24,12 +28,18 @@ export function AddWord() {
 
   async function lookup(e?: FormEvent) {
     e?.preventDefault()
-    const q = word.trim()
+    if (loading) return
+    const q = word.trim().replace(/\s+/g, ' ')
     if (!q) {
       setError('Type a word to look up.')
       return
     }
+    if (q.length > 60) {
+      setError('That’s too long to look up — try a single word or short phrase.')
+      return
+    }
 
+    const seq = ++lookupSeq.current
     setLoading(true)
     setError(null)
     setEnrichment(null)
@@ -37,12 +47,21 @@ export function AddWord() {
 
     try {
       const result = await enrichWord(q)
+      if (seq !== lookupSeq.current) return
       setEnrichment(result)
       setWord(result.word)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lookup failed.')
+      if (seq !== lookupSeq.current) return
+      const offline = typeof navigator !== 'undefined' && !navigator.onLine
+      setError(
+        offline
+          ? 'You’re offline, so the meaning can’t be fetched. Fill it in manually or try again once you’re back online.'
+          : err instanceof Error
+            ? err.message
+            : 'Lookup failed.',
+      )
     } finally {
-      setLoading(false)
+      if (seq === lookupSeq.current) setLoading(false)
     }
   }
 
@@ -73,7 +92,7 @@ export function AddWord() {
 
   function onSave(e: FormEvent) {
     e.preventDefault()
-    if (!enrichment) return
+    if (!enrichment || saved) return
 
     const ex1 = enrichment.examples[0].trim()
     const ex2 = enrichment.examples[1].trim() || ex1
@@ -88,7 +107,7 @@ export function AddWord() {
       return
     }
 
-    addWord({
+    const entry = addWord({
       word: enrichment.word.trim() || word.trim(),
       meaning: enrichment.meaning.trim(),
       meaningHi: enrichment.meaningHi.trim(),
@@ -97,6 +116,10 @@ export function AddWord() {
       phonetic: enrichment.phonetic.trim(),
       partOfSpeech: enrichment.partOfSpeech.trim() || 'noun',
     })
+    if (!entry) {
+      setError('Couldn’t save — please sign in again.')
+      return
+    }
 
     setSaved(true)
     setWord('')
@@ -104,7 +127,7 @@ export function AddWord() {
     setNotes('')
     setIsManual(false)
 
-    window.setTimeout(() => {
+    navTimer.current = window.setTimeout(() => {
       setSaved(false)
       navigate('/review')
     }, 900)
@@ -113,11 +136,9 @@ export function AddWord() {
   return (
     <>
       <div className="page-head">
-        <h1>Capture a word</h1>
-        <p>
-          Just type the word. Retain looks up the English meaning, Hindi meaning, and two
-          strong example sentences for you.
-        </p>
+        <p className="eyebrow">New word</p>
+        <h1>Catch a word ✍️</h1>
+        <p>Type it — Retain finds the English meaning, Hindi meaning and two example sentences.</p>
       </div>
 
       <form className="form" onSubmit={enrichment ? onSave : lookup}>
@@ -134,6 +155,10 @@ export function AddWord() {
                 setIsManual(false)
               }}
               placeholder="e.g. articulate, rizz, serendipity"
+              maxLength={LIMITS.word}
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="search"
               required
               autoFocus
               disabled={loading}
@@ -230,6 +255,7 @@ export function AddWord() {
                 value={enrichment.meaning}
                 onChange={(e) => setEnrichment({ ...enrichment, meaning: e.target.value })}
                 placeholder="Definition in simple, clear English..."
+                maxLength={LIMITS.meaning}
                 rows={2}
                 required
                 autoFocus={isManual}
@@ -243,6 +269,7 @@ export function AddWord() {
                 value={enrichment.meaningHi}
                 onChange={(e) => setEnrichment({ ...enrichment, meaningHi: e.target.value })}
                 placeholder="हिंदी में अर्थ..."
+                maxLength={LIMITS.meaning}
                 rows={2}
                 className="hindi"
               />
@@ -255,6 +282,7 @@ export function AddWord() {
                 value={enrichment.examples[0]}
                 onChange={(e) => updateExample(0, e.target.value)}
                 placeholder="A natural sentence using the word..."
+                maxLength={LIMITS.example}
                 rows={2}
                 required
               />
@@ -267,6 +295,7 @@ export function AddWord() {
                 value={enrichment.examples[1]}
                 onChange={(e) => updateExample(1, e.target.value)}
                 placeholder="Another spoken example..."
+                maxLength={LIMITS.example}
                 rows={2}
               />
             </div>
@@ -278,13 +307,14 @@ export function AddWord() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Personal tip — when you’d use this while speaking…"
+                maxLength={LIMITS.notes}
                 rows={2}
               />
             </div>
 
             <div className="cta-row">
-              <button className="btn btn-primary" type="submit" disabled={Boolean(existing)}>
-                Save & queue for review
+              <button className="btn btn-primary" type="submit" disabled={Boolean(existing) || saved}>
+                Save it
               </button>
               <button
                 className="btn btn-ghost"
@@ -299,7 +329,7 @@ export function AddWord() {
         )}
       </form>
 
-      {saved && <div className="toast">Saved — heading to review</div>}
+      {saved && <div className="toast">Saved ✨ heading to review</div>}
     </>
   )
 }

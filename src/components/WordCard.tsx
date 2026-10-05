@@ -21,6 +21,7 @@ export function WordCard({ word, onOpen }: WordCardProps) {
         >
           {word.word}
         </button>
+        {word.partOfSpeech && <span className="word-pos">{word.partOfSpeech}</span>}
 
         {revealed && (
           <div className="meaning-reveal">

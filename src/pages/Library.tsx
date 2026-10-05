@@ -1,19 +1,32 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ShareIcon } from '../components/Icons'
+import { ShareSheet } from '../components/ShareSheet'
 import { WordCard } from '../components/WordCard'
-import { useVocab } from '../hooks/useVocab'
+import { useShares } from '../hooks/useShares'
+import { findWordByName, LIMITS, useVocab } from '../hooks/useVocab'
 import { isDue } from '../lib/vocab'
 import type { VocabWord } from '../types'
 
 type Filter = 'all' | 'due' | 'learning' | 'strong'
 
+const FILTERS: [Filter, string][] = [
+  ['all', 'All'],
+  ['due', 'Due'],
+  ['learning', 'Learning'],
+  ['strong', 'Strong'],
+]
+
 export function Library() {
   const { words, deleteWord, updateWord } = useVocab()
+  const { available: sharingAvailable } = useShares()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
-  const [selected, setSelected] = useState<VocabWord | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [sharing, setSharing] = useState<VocabWord | null>(null)
   const [editing, setEditing] = useState(false)
   const [modalRevealed, setModalRevealed] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   const [draft, setDraft] = useState({
     word: '',
     meaning: '',
@@ -22,6 +35,21 @@ export function Library() {
     example2: '',
     notes: '',
   })
+
+  const selected = useMemo(() => words.find((w) => w.id === selectedId) ?? null, [words, selectedId])
+
+  useEffect(() => {
+    if (selectedId && !selected) setSelectedId(null)
+  }, [selectedId, selected])
+
+  useEffect(() => {
+    if (!selected) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !sharing) setSelectedId(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selected, sharing])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -42,8 +70,9 @@ export function Library() {
   }, [words, query, filter])
 
   function openWord(word: VocabWord) {
-    setSelected(word)
+    setSelectedId(word.id)
     setEditing(false)
+    setEditError(null)
     setModalRevealed(false)
     setDraft({
       word: word.word,
@@ -57,51 +86,64 @@ export function Library() {
 
   function saveEdit() {
     if (!selected) return
-    const patch = {
-      word: draft.word,
+    const name = draft.word.trim()
+    if (!name) {
+      setEditError('The word can’t be empty.')
+      return
+    }
+    if (!draft.meaning.trim()) {
+      setEditError('Add a meaning so you can review it.')
+      return
+    }
+    if (findWordByName(name, selected.id)) {
+      setEditError(`“${name}” is already in your words.`)
+      return
+    }
+    updateWord(selected.id, {
+      word: name,
       meaning: draft.meaning,
       meaningHi: draft.meaningHi,
-      examples: [draft.example1, draft.example2] as [string, string],
+      examples: [draft.example1, draft.example2],
       notes: draft.notes,
-    }
-    updateWord(selected.id, patch)
-    setSelected({ ...selected, ...patch })
+    })
+    setEditError(null)
     setEditing(false)
   }
 
   function removeWord() {
     if (!selected) return
-    if (!window.confirm(`Delete “${selected.word}”?`)) return
+    if (!window.confirm(`Delete “${selected.word}”? This can’t be undone.`)) return
     deleteWord(selected.id)
-    setSelected(null)
+    setSelectedId(null)
   }
+
+  const examples = selected ? selected.examples.filter((e, i, all) => e && all.indexOf(e) === i) : []
 
   return (
     <>
       <div className="page-head">
-        <h1>Library</h1>
-        <p>Tap a word to reveal its meaning.</p>
+        <p className="eyebrow">{words.length} saved</p>
+        <h1>Your words</h1>
+        <p>Tap a word to peek at the meaning.</p>
       </div>
 
       <div className="toolbar">
         <input
           className="search"
+          type="search"
           value={query}
+          maxLength={80}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search words, meanings, sentences…"
+          aria-label="Search your words"
         />
-        <div className="filter-pills">
-          {(
-            [
-              ['all', 'All'],
-              ['due', 'Due'],
-              ['learning', 'Learning'],
-              ['strong', 'Strong'],
-            ] as const
-          ).map(([id, label]) => (
+        <div className="filter-pills" role="tablist">
+          {FILTERS.map(([id, label]) => (
             <button
               key={id}
               type="button"
+              role="tab"
+              aria-selected={filter === id}
               className={filter === id ? 'active' : ''}
               onClick={() => setFilter(id)}
             >
@@ -113,10 +155,11 @@ export function Library() {
 
       {filtered.length === 0 ? (
         <div className="empty">
+          <div className="empty-emoji" aria-hidden>{words.length === 0 ? '🫙' : '🔍'}</div>
           <h3>{words.length === 0 ? 'Your vault is empty' : 'No matches'}</h3>
           <p>
             {words.length === 0
-              ? 'Type any English word — Retain fills meaning and examples for you.'
+              ? 'Type any English word — Retain fills the meaning and examples for you.'
               : 'Try a different search or filter.'}
           </p>
           {words.length === 0 && (
@@ -126,16 +169,17 @@ export function Library() {
           )}
         </div>
       ) : (
-        <div className="word-list section">
+        <div className="word-list">
           {filtered.map((word) => (
             <WordCard key={word.id} word={word} onOpen={openWord} />
           ))}
         </div>
       )}
 
-      {selected && (
-        <div className="modal-backdrop" onClick={() => setSelected(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+      {selected && !sharing && (
+        <div className="modal-backdrop" onClick={() => setSelectedId(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label={selected.word} onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" aria-hidden />
             {!editing ? (
               <>
                 <button
@@ -147,54 +191,38 @@ export function Library() {
                 >
                   {selected.word}
                 </button>
-                {selected.phonetic && (
-                  <p style={{ color: 'var(--ink-faint)', marginTop: '0.25rem' }}>
-                    {selected.phonetic}
-                    {selected.partOfSpeech ? ` · ${selected.partOfSpeech}` : ''}
-                  </p>
+                {(selected.phonetic || selected.partOfSpeech) && (
+                  <div className="modal-meta">
+                    {selected.partOfSpeech && <span className="chip">{selected.partOfSpeech}</span>}
+                    {selected.phonetic && <span className="chip">{selected.phonetic}</span>}
+                  </div>
                 )}
+                {!modalRevealed && <p className="muted tap-hint">Tap the word to reveal</p>}
 
                 {modalRevealed && (
                   <div className="modal-revealed">
-                    <p style={{ color: 'var(--ink-soft)', marginTop: '0.85rem' }}>
-                      {selected.meaning}
-                    </p>
-                    {selected.meaningHi && (
-                      <p
-                        className="hindi-text"
-                        style={{ color: 'var(--mint)', marginTop: '0.45rem' }}
-                      >
-                        {selected.meaningHi}
-                      </p>
-                    )}
-                    <p className="sentence">“{selected.examples[0]}”</p>
-                    <p className="sentence" style={{ marginTop: 0 }}>
-                      “{selected.examples[1]}”
-                    </p>
-                    {selected.notes && (
-                      <p style={{ color: 'var(--ink-faint)', lineHeight: 1.5 }}>
-                        {selected.notes}
-                      </p>
-                    )}
+                    {selected.meaning && <p className="modal-meaning">{selected.meaning}</p>}
+                    {selected.meaningHi && <p className="modal-meaning hindi-text">{selected.meaningHi}</p>}
+                    {examples.map((ex, i) => (
+                      <p key={i} className="sentence">“{ex}”</p>
+                    ))}
+                    {selected.notes && <p className="muted">{selected.notes}</p>}
                   </div>
                 )}
 
                 <div className="modal-actions">
-                  <button className="btn btn-ghost" type="button" onClick={removeWord}>
+                  <button className="btn btn-ghost btn-danger" type="button" onClick={removeWord}>
                     Delete
                   </button>
-                  <button
-                    className="btn btn-ghost"
-                    type="button"
-                    onClick={() => setEditing(true)}
-                  >
+                  <button className="btn btn-ghost" type="button" onClick={() => setEditing(true)}>
                     Edit
                   </button>
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    onClick={() => setSelected(null)}
-                  >
+                  {sharingAvailable && (
+                    <button className="btn btn-pink" type="button" onClick={() => setSharing(selected)}>
+                      <ShareIcon size={17} /> Share
+                    </button>
+                  )}
+                  <button className="btn btn-primary" type="button" onClick={() => setSelectedId(null)}>
                     Close
                   </button>
                 </div>
@@ -202,12 +230,13 @@ export function Library() {
             ) : (
               <>
                 <h2>Edit word</h2>
-                <div className="form" style={{ marginTop: '1rem' }}>
+                <div className="form">
                   <div className="field field-word">
                     <label htmlFor="edit-word">Word</label>
                     <input
                       id="edit-word"
                       value={draft.word}
+                      maxLength={LIMITS.word}
                       onChange={(e) => setDraft({ ...draft, word: e.target.value })}
                     />
                   </div>
@@ -216,6 +245,7 @@ export function Library() {
                     <textarea
                       id="edit-meaning"
                       value={draft.meaning}
+                      maxLength={LIMITS.meaning}
                       onChange={(e) => setDraft({ ...draft, meaning: e.target.value })}
                     />
                   </div>
@@ -225,6 +255,7 @@ export function Library() {
                       id="edit-meaning-hi"
                       className="hindi"
                       value={draft.meaningHi}
+                      maxLength={LIMITS.meaning}
                       onChange={(e) => setDraft({ ...draft, meaningHi: e.target.value })}
                     />
                   </div>
@@ -233,6 +264,7 @@ export function Library() {
                     <textarea
                       id="edit-ex1"
                       value={draft.example1}
+                      maxLength={LIMITS.example}
                       onChange={(e) => setDraft({ ...draft, example1: e.target.value })}
                     />
                   </div>
@@ -241,6 +273,7 @@ export function Library() {
                     <textarea
                       id="edit-ex2"
                       value={draft.example2}
+                      maxLength={LIMITS.example}
                       onChange={(e) => setDraft({ ...draft, example2: e.target.value })}
                     />
                   </div>
@@ -249,12 +282,21 @@ export function Library() {
                     <textarea
                       id="edit-notes"
                       value={draft.notes}
+                      maxLength={LIMITS.notes}
                       onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
                     />
                   </div>
                 </div>
+                {editError && <div className="form-error">{editError}</div>}
                 <div className="modal-actions">
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditing(false)}>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={() => {
+                      setEditing(false)
+                      setEditError(null)
+                    }}
+                  >
                     Cancel
                   </button>
                   <button className="btn btn-primary" type="button" onClick={saveEdit}>
@@ -266,6 +308,8 @@ export function Library() {
           </div>
         </div>
       )}
+
+      {sharing && <ShareSheet word={sharing} onClose={() => setSharing(null)} />}
     </>
   )
 }

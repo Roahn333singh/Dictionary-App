@@ -298,82 +298,10 @@ export function useVocab() {
 
   const dueWords = useMemo(() => getDueWords(data.words, new Date(now)), [data.words, now])
 
-  const addWord = useCallback((input: AddWordInput) => {
-    const now = new Date().toISOString()
-    const entry: VocabWord = {
-      id: createId(),
-      word: input.word.trim(),
-      meaning: input.meaning.trim(),
-      meaningHi: input.meaningHi.trim(),
-      examples: [input.examples[0].trim(), input.examples[1].trim()],
-      notes: (input.notes ?? '').trim(),
-      phonetic: (input.phonetic ?? '').trim(),
-      partOfSpeech: (input.partOfSpeech ?? '').trim(),
-      createdAt: now,
-      updatedAt: now,
-      nextReviewAt: now,
-      intervalDays: 0,
-      easeFactor: 2.5,
-      repetitions: 0,
-      lapses: 0,
-    }
-    commit((prev) => ({
-      ...prev,
-      words: [entry, ...prev.words],
-      dirty: { ...prev.dirty, [entry.id]: changeToken() },
-    }))
-    void flush()
-    return entry
-  }, [])
-
-  const updateWord = useCallback((id: string, patch: UpdateWordPatch) => {
-    commit((prev) => ({
-      ...prev,
-      words: prev.words.map((w) => {
-        if (w.id !== id) return w
-        return {
-          ...w,
-          word: patch.word?.trim() || w.word,
-          meaning: patch.meaning?.trim() ?? w.meaning,
-          meaningHi: patch.meaningHi?.trim() ?? w.meaningHi,
-          examples: patch.examples
-            ? [patch.examples[0].trim(), patch.examples[1].trim() || patch.examples[0].trim()]
-            : w.examples,
-          notes: patch.notes?.trim() ?? w.notes,
-          phonetic: patch.phonetic?.trim() ?? w.phonetic,
-          partOfSpeech: patch.partOfSpeech?.trim() ?? w.partOfSpeech,
-          updatedAt: new Date().toISOString(),
-        }
-      }),
-      dirty: { ...prev.dirty, [id]: changeToken() },
-    }))
-    void flush()
-  }, [])
-
-  const deleteWord = useCallback((id: string) => {
-    commit((prev) => {
-      const dirty = { ...prev.dirty }
-      delete dirty[id]
-      return {
-        ...prev,
-        words: prev.words.filter((w) => w.id !== id),
-        dirty,
-        deleted: prev.deleted.includes(id) ? prev.deleted : [...prev.deleted, id],
-      }
-    })
-    void flush()
-  }, [])
-
-  const reviewWord = useCallback((id: string, rating: ReviewRating) => {
-    commit((prev) => ({
-      ...prev,
-      words: prev.words.map((w) => (w.id === id ? scheduleReview(w, rating) : w)),
-      stats: updateStreak(prev.stats),
-      dirty: { ...prev.dirty, [id]: changeToken() },
-      statsDirty: true,
-    }))
-    void flush()
-  }, [])
+  const addWord = useCallback((input: AddWordInput) => addWordToStore(input), [])
+  const updateWord = useCallback((id: string, patch: UpdateWordPatch) => updateWordInStore(id, patch), [])
+  const deleteWord = useCallback((id: string) => deleteWordFromStore(id), [])
+  const reviewWord = useCallback((id: string, rating: ReviewRating) => reviewWordInStore(id, rating), [])
 
   return {
     words: data.words,
@@ -384,4 +312,97 @@ export function useVocab() {
     deleteWord,
     reviewWord,
   }
+}
+
+const clip = (value: string | undefined, max: number) => (value ?? '').trim().slice(0, max)
+
+export const LIMITS = { word: 80, meaning: 600, example: 400, notes: 1000, phonetic: 80, pos: 30 }
+
+export function findWordByName(name: string, exceptId?: string): VocabWord | undefined {
+  const key = name.trim().toLowerCase()
+  if (!key) return undefined
+  return snapshot.data.words.find((w) => w.id !== exceptId && w.word.trim().toLowerCase() === key)
+}
+
+export function addWordToStore(input: AddWordInput): VocabWord | null {
+  const word = clip(input.word, LIMITS.word)
+  if (!word || !snapshot.userId) return null
+  const ex1 = clip(input.examples[0], LIMITS.example)
+  const ex2 = clip(input.examples[1], LIMITS.example)
+  const now = new Date().toISOString()
+  const entry: VocabWord = {
+    id: createId(),
+    word,
+    meaning: clip(input.meaning, LIMITS.meaning),
+    meaningHi: clip(input.meaningHi, LIMITS.meaning),
+    examples: [ex1 || ex2, ex2 || ex1],
+    notes: clip(input.notes, LIMITS.notes),
+    phonetic: clip(input.phonetic, LIMITS.phonetic),
+    partOfSpeech: clip(input.partOfSpeech, LIMITS.pos),
+    createdAt: now,
+    updatedAt: now,
+    nextReviewAt: now,
+    intervalDays: 0,
+    easeFactor: 2.5,
+    repetitions: 0,
+    lapses: 0,
+  }
+  commit((prev) => ({
+    ...prev,
+    words: [entry, ...prev.words],
+    dirty: { ...prev.dirty, [entry.id]: changeToken() },
+  }))
+  void flush()
+  return entry
+}
+
+function updateWordInStore(id: string, patch: UpdateWordPatch) {
+  if (!snapshot.data.words.some((w) => w.id === id)) return
+  commit((prev) => ({
+    ...prev,
+    words: prev.words.map((w) => {
+      if (w.id !== id) return w
+      const ex1 = patch.examples ? clip(patch.examples[0], LIMITS.example) : w.examples[0]
+      const ex2 = patch.examples ? clip(patch.examples[1], LIMITS.example) : w.examples[1]
+      return {
+        ...w,
+        word: clip(patch.word, LIMITS.word) || w.word,
+        meaning: patch.meaning !== undefined ? clip(patch.meaning, LIMITS.meaning) : w.meaning,
+        meaningHi: patch.meaningHi !== undefined ? clip(patch.meaningHi, LIMITS.meaning) : w.meaningHi,
+        examples: [ex1 || ex2, ex2 || ex1],
+        notes: patch.notes !== undefined ? clip(patch.notes, LIMITS.notes) : w.notes,
+        phonetic: patch.phonetic !== undefined ? clip(patch.phonetic, LIMITS.phonetic) : w.phonetic,
+        partOfSpeech: patch.partOfSpeech !== undefined ? clip(patch.partOfSpeech, LIMITS.pos) : w.partOfSpeech,
+        updatedAt: new Date().toISOString(),
+      }
+    }),
+    dirty: { ...prev.dirty, [id]: changeToken() },
+  }))
+  void flush()
+}
+
+function deleteWordFromStore(id: string) {
+  commit((prev) => {
+    const dirty = { ...prev.dirty }
+    delete dirty[id]
+    return {
+      ...prev,
+      words: prev.words.filter((w) => w.id !== id),
+      dirty,
+      deleted: prev.deleted.includes(id) ? prev.deleted : [...prev.deleted, id],
+    }
+  })
+  void flush()
+}
+
+function reviewWordInStore(id: string, rating: ReviewRating) {
+  if (!snapshot.data.words.some((w) => w.id === id)) return
+  commit((prev) => ({
+    ...prev,
+    words: prev.words.map((w) => (w.id === id ? scheduleReview(w, rating) : w)),
+    stats: updateStreak(prev.stats),
+    dirty: { ...prev.dirty, [id]: changeToken() },
+    statsDirty: true,
+  }))
+  void flush()
 }

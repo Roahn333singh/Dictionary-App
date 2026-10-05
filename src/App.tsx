@@ -3,6 +3,7 @@ import { AuthGate } from './components/AuthGate'
 import { Layout } from './components/Layout'
 import { AddWord } from './pages/AddWord'
 import { Home } from './pages/Home'
+import { Inbox } from './pages/Inbox'
 import { Library } from './pages/Library'
 import { Review } from './pages/Review'
 
@@ -16,6 +17,7 @@ export default function App() {
             <Route path="add" element={<AddWord />} />
             <Route path="review" element={<Review />} />
             <Route path="library" element={<Library />} />
+            <Route path="inbox" element={<Inbox />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
