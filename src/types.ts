@@ -29,6 +29,16 @@ export interface AppData {
   stats: AppStats
 }
 
+export interface UserStore extends AppData {
+  /** word id → change token for edits not yet saved to the cloud */
+  dirty: Record<string, string>
+  /** ids deleted locally but not yet deleted in the cloud */
+  deleted: string[]
+  statsDirty: boolean
+}
+
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
+
 export interface WordEnrichment {
   word: string
   meaning: string

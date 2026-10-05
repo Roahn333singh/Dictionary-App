@@ -18,6 +18,7 @@ dev-dist
 # Environment and secrets
 .env
 .env.*
+!.env.example
 *.local
 
 # Vite

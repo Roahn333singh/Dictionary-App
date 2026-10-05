@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useVocab } from '../hooks/useVocab'
 import { enrichWord } from '../lib/enrich'
 import type { WordEnrichment } from '../types'
 
 export function AddWord() {
-  const { addWord } = useVocab()
+  const { words, addWord } = useVocab()
   const navigate = useNavigate()
   const [word, setWord] = useState('')
   const [enrichment, setEnrichment] = useState<WordEnrichment | null>(null)
@@ -14,6 +14,13 @@ export function AddWord() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [isManual, setIsManual] = useState(false)
+
+  function findExisting(value: string) {
+    const key = value.trim().toLowerCase()
+    return key ? words.find((w) => w.word.trim().toLowerCase() === key) : undefined
+  }
+
+  const existing = enrichment ? findExisting(enrichment.word) : findExisting(word)
 
   async function lookup(e?: FormEvent) {
     e?.preventDefault()
@@ -73,6 +80,11 @@ export function AddWord() {
 
     if (!enrichment.meaning.trim() || !ex1) {
       setError('Meaning and at least one example sentence are required.')
+      return
+    }
+
+    if (findExisting(enrichment.word || word)) {
+      setError('This word is already in your library.')
       return
     }
 
@@ -150,6 +162,15 @@ export function AddWord() {
             )}
           </div>
         </div>
+
+        {existing && !saved && (
+          <div className="lookup-status" role="status">
+            “{existing.word}” is already in your library.{' '}
+            <Link to="/library" className="btn-text-action">
+              Open library
+            </Link>
+          </div>
+        )}
 
         {error && (
           <div className="form-error">
@@ -262,7 +283,7 @@ export function AddWord() {
             </div>
 
             <div className="cta-row">
-              <button className="btn btn-primary" type="submit">
+              <button className="btn btn-primary" type="submit" disabled={Boolean(existing)}>
                 Save & queue for review
               </button>
               <button

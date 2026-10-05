@@ -12,14 +12,15 @@ export function Review() {
   const [started, setStarted] = useState(false)
 
   useEffect(() => {
-    if (!started) {
+    const lateArrivals = started && queue.length === 0 && sessionDone === 0 && dueWords.length > 0
+    if (!started || lateArrivals) {
       setQueue(dueWords)
       setIndex(0)
       setRevealed(false)
       setSessionDone(0)
       setStarted(true)
     }
-  }, [dueWords, started])
+  }, [dueWords, started, queue.length, sessionDone])
 
   const current = queue[index]
   const total = queue.length

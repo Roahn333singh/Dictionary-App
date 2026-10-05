@@ -1,4 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { AccountMenu } from './AccountMenu'
+import { LegacyImportBanner } from './LegacyImportBanner'
 import { PwaUpdateToast } from './PwaUpdateToast'
 import { ThemePicker } from './ThemePicker'
 
@@ -12,6 +14,7 @@ export function Layout() {
         </NavLink>
         <div className="topnav-right">
           <ThemePicker />
+          <AccountMenu />
           <nav className="nav-links">
             <NavLink to="/" end>
               Home
@@ -22,6 +25,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
+      <LegacyImportBanner />
       <Outlet />
       <PwaUpdateToast />
     </div>

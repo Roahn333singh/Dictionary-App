@@ -1,14 +1,26 @@
-import type { AppData, ReviewRating, VocabWord } from '../types'
+import type { AppData, AppStats, ReviewRating, UserStore, VocabWord } from '../types'
 
-const STORAGE_KEY = 'retain-vocab-v1'
+const LEGACY_KEY = 'retain-vocab-v1'
+const LEGACY_IMPORTED_KEY = 'retain-legacy-imported'
+const userKey = (userId: string) => `retain-user-v2:${userId}`
+const legacyDismissedKey = (userId: string) => `retain-legacy-dismissed:${userId}`
+
+const defaultStats = (): AppStats => ({
+  streak: 0,
+  lastReviewDate: null,
+  totalReviews: 0,
+})
 
 const defaultData = (): AppData => ({
   words: [],
-  stats: {
-    streak: 0,
-    lastReviewDate: null,
-    totalReviews: 0,
-  },
+  stats: defaultStats(),
+})
+
+export const emptyUserStore = (): UserStore => ({
+  ...defaultData(),
+  dirty: {},
+  deleted: [],
+  statsDirty: false,
 })
 
 function normalizeWord(raw: Partial<VocabWord> & { sentence?: string }): VocabWord {
@@ -41,28 +53,64 @@ function normalizeWord(raw: Partial<VocabWord> & { sentence?: string }): VocabWo
   }
 }
 
-export function loadData(): AppData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return defaultData()
-    const parsed = JSON.parse(raw) as AppData
-    return {
-      words: Array.isArray(parsed.words)
-        ? parsed.words.map((w) => normalizeWord(w as VocabWord & { sentence?: string }))
-        : [],
-      stats: {
-        streak: parsed.stats?.streak ?? 0,
-        lastReviewDate: parsed.stats?.lastReviewDate ?? null,
-        totalReviews: parsed.stats?.totalReviews ?? 0,
-      },
-    }
-  } catch {
-    return defaultData()
+function parseData(parsed: Partial<AppData> | null): AppData {
+  if (!parsed) return defaultData()
+  return {
+    words: Array.isArray(parsed.words)
+      ? parsed.words.map((w) => normalizeWord(w as VocabWord & { sentence?: string }))
+      : [],
+    stats: {
+      streak: parsed.stats?.streak ?? 0,
+      lastReviewDate: parsed.stats?.lastReviewDate ?? null,
+      totalReviews: parsed.stats?.totalReviews ?? 0,
+    },
   }
 }
 
-export function saveData(data: AppData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+export function loadUserStore(userId: string): UserStore {
+  try {
+    const raw = localStorage.getItem(userKey(userId))
+    if (!raw) return emptyUserStore()
+    const parsed = JSON.parse(raw) as Partial<UserStore>
+    return {
+      ...parseData(parsed),
+      dirty: parsed.dirty && typeof parsed.dirty === 'object' ? parsed.dirty : {},
+      deleted: Array.isArray(parsed.deleted) ? parsed.deleted : [],
+      statsDirty: Boolean(parsed.statsDirty),
+    }
+  } catch {
+    return emptyUserStore()
+  }
+}
+
+export function saveUserStore(userId: string, store: UserStore): void {
+  try {
+    localStorage.setItem(userKey(userId), JSON.stringify(store))
+  } catch {
+    // Storage full or blocked — the cloud copy is still the source of truth.
+  }
+}
+
+/** Words saved on this device before accounts existed (not yet claimed by any account). */
+export function loadUnclaimedLegacyData(userId: string): AppData | null {
+  try {
+    if (localStorage.getItem(LEGACY_IMPORTED_KEY)) return null
+    if (localStorage.getItem(legacyDismissedKey(userId))) return null
+    const raw = localStorage.getItem(LEGACY_KEY)
+    if (!raw) return null
+    const data = parseData(JSON.parse(raw) as AppData)
+    return data.words.length > 0 ? data : null
+  } catch {
+    return null
+  }
+}
+
+export function markLegacyImported(): void {
+  localStorage.setItem(LEGACY_IMPORTED_KEY, new Date().toISOString())
+}
+
+export function markLegacyDismissed(userId: string): void {
+  localStorage.setItem(legacyDismissedKey(userId), new Date().toISOString())
 }
 
 export function createId(): string {

@@ -1,4 +1,5 @@
 import type { WordEnrichment } from '../types'
+import { supabase } from './supabase'
 
 type DefinitionCandidate = {
   word: string
@@ -343,14 +344,82 @@ function ensureTwoExamples(
   return [unique[0], unique[1]]
 }
 
+type AiEnrichment = {
+  found?: boolean
+  word?: string
+  partOfSpeech?: string
+  phonetic?: string
+  meaning?: string
+  meaningHi?: string
+  examples?: string[]
+  error?: string
+}
+
+const AI_TIMEOUT_MS = 20_000
+
+/** Gemini via the `enrich` Edge Function. Returns null when unavailable, 'not-found' for non-words. */
+async function enrichWithAi(word: string): Promise<WordEnrichment | 'not-found' | null> {
+  if (!supabase) return null
+  let timer: number | undefined
+  try {
+    const timeout = new Promise<null>((resolve) => {
+      timer = window.setTimeout(() => resolve(null), AI_TIMEOUT_MS)
+    })
+    const result = await Promise.race([
+      supabase.functions.invoke<AiEnrichment>('enrich', { body: { word } }),
+      timeout,
+    ])
+    if (!result || result.error || !result.data || result.data.error) return null
+    const ai = result.data
+    if (ai.found === false) return 'not-found'
+    const meaning = (ai.meaning ?? '').trim()
+    if (!meaning) return null
+
+    const finalWord = (ai.word ?? '').trim() || word
+    const pos = (ai.partOfSpeech ?? '').trim().toLowerCase() || 'noun'
+    const examples = ensureTwoExamples(finalWord, pos, meaning, [], ai.examples ?? [])
+    let meaningHi = (ai.meaningHi ?? '').trim()
+    if (!meaningHi) meaningHi = await translateToHindi(meaning)
+
+    return {
+      word: finalWord,
+      meaning,
+      meaningHi,
+      examples,
+      phonetic: (ai.phonetic ?? '').trim(),
+      partOfSpeech: pos,
+    }
+  } catch {
+    return null
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 /**
- * Look up a word using Wiktionary, Datamuse, and Wikipedia in parallel.
- * Does not depend on api.dictionaryapi.dev, which is often unreachable.
+ * Look up a word: Gemini (accurate English + Hindi, cached server-side) first,
+ * then free dictionaries (Wiktionary, Datamuse, Wikipedia) as a fallback.
  */
 export async function enrichWord(rawWord: string): Promise<WordEnrichment> {
-  const trimmed = rawWord.trim()
+  const trimmed = rawWord.trim().replace(/\s+/g, ' ')
   if (!trimmed) throw new Error('Enter a word first.')
 
+  const ai = await enrichWithAi(trimmed)
+  if (ai && ai !== 'not-found') return ai
+
+  try {
+    return await enrichWithFreeDictionaries(trimmed)
+  } catch (err) {
+    if (ai === 'not-found') {
+      throw new Error(
+        `“${trimmed}” doesn’t look like an English word. Check the spelling or enter details manually.`,
+      )
+    }
+    throw err
+  }
+}
+
+async function enrichWithFreeDictionaries(trimmed: string): Promise<WordEnrichment> {
   const normalizedKey = trimmed.toLowerCase()
 
   const [wiktionary, datamuse, wikipedia] = await Promise.all([
