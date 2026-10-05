@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="glowA" cx="0.12" cy="0.1" r="0.7">
+      <stop offset="0" stop-color="#C6FF3D" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#C6FF3D" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0.92" cy="0.95" r="0.7">
+      <stop offset="0" stop-color="#FF5EC4" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#FF5EC4" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="16" cy="16" r="2" fill="#FFFFFF" fill-opacity="0.07"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" fill="#101014"/>
+  <rect width="512" height="512" fill="url(#dots)"/>
+  <rect width="512" height="512" fill="url(#glowA)"/>
+  <rect width="512" height="512" fill="url(#glowB)"/>
+  <g transform="rotate(-7 256 256)">
+    <rect x="146" y="146" width="244" height="244" rx="60" fill="#FF5EC4" stroke="#000" stroke-width="12"/>
+    <rect x="124" y="124" width="244" height="244" rx="60" fill="#C6FF3D" stroke="#000" stroke-width="12"/>
+    <path transform="translate(182 166) scale(1.5)" fill="#101014" fill-rule="evenodd"
+      d="M0 0H46C68 0 82 13 82 30C82 43 74 53 62 57L86 100H57L37 61H26V100H0Z M26 21V40H45C52 40 56 36 56 30.5C56 25 52 21 45 21Z"/>
+  </g>
+  <path transform="translate(372 140)" fill="#3DE0FF" stroke="#000" stroke-width="7" stroke-linejoin="round"
+    d="M0 -40C5 -12 12 -5 40 0C12 5 5 12 0 40C-5 12 -12 5 -40 0C-12 -5 -5 -12 0 -40Z"/>
+</svg>
