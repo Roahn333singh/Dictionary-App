@@ -63,26 +63,20 @@ Then open the URL Vite prints (usually `http://localhost:5173`).
 
 Words saved in a browser before accounts existed are offered once after sign-in ("Found N words… Are they yours?"). Choose **Yes** to move them into your account, or **Not mine** on a shared device.
 
-## Deploy on DigitalOcean App Platform
+## Deploy on Google Cloud Run
 
-Prefer a **Static Site** (not a Web Service). Settings:
+Live: https://retain-986644135829.asia-south1.run.app
 
-| Setting | Value |
-| --- | --- |
-| Build command | `npm run build` |
-| Output directory | `dist` |
-| Catchall Document | `index.html` |
+The app is built locally (so `.env.local` is baked in) and Cloud Run only serves the static files with nginx (`Dockerfile`, `nginx.conf`). `.gcloudignore` uploads just `dist/` plus those two files, which keeps builds to seconds.
 
-The Catchall Document is required so client-side routes (`/review`, `/add`, `/library`) serve `index.html` on refresh or direct paste instead of a DigitalOcean 404.
+```bash
+npm run build
+CLOUDSDK_ACTIVE_CONFIG_NAME=retain gcloud run deploy retain --source . \
+  --region asia-south1 --allow-unauthenticated --port 8080 \
+  --memory 128Mi --cpu 1 --min-instances 0 --max-instances 2 --quiet
+```
 
-Repo config lives in [`.do/app.yaml`](.do/app.yaml) with `catchall_document: index.html`.
-
-### If the app is already a Web Service
-
-Either convert the component to a **Static Site** (recommended), or keep it as a Web Service and set:
-
-- **Build command:** `npm run build`
-- **Run command:** `npm start` (serves `dist` with SPA fallback via `serve -s`)
+`--min-instances 0` scales to zero when idle, so a few users stay within the free tier.
 
 ## Install on your phone (PWA)
 

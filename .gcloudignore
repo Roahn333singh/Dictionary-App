@@ -1,0 +1,6 @@
+# Upload only what the container needs; the app is built locally.
+*
+!Dockerfile
+!nginx.conf
+!dist/
+!dist/**
