@@ -897,15 +897,15 @@ code {
 }
 
 .word-list > .word-row:nth-child(3n + 1) {
-  background: color-mix(in srgb, var(--pink) 10%, var(--card));
+  background: color-mix(in srgb, var(--pink) 26%, var(--card));
 }
 
 .word-list > .word-row:nth-child(3n + 2) {
-  background: color-mix(in srgb, var(--cyan) 11%, var(--card));
+  background: color-mix(in srgb, var(--cyan) 26%, var(--card));
 }
 
 .word-list > .word-row:nth-child(3n + 3) {
-  background: color-mix(in srgb, var(--yellow) 12%, var(--card));
+  background: color-mix(in srgb, var(--yellow) 28%, var(--card));
 }
 
 .word-row:hover {
