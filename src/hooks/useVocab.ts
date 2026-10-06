@@ -314,7 +314,13 @@ export function useVocab() {
   }
 }
 
-const clip = (value: string | undefined, max: number) => (value ?? '').trim().slice(0, max)
+const clip = (value: string | undefined, max: number) =>
+  (value ?? '')
+    .replace(/\r/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+    .slice(0, max)
 
 export const LIMITS = { word: 80, meaning: 600, example: 400, notes: 1000, phonetic: 80, pos: 30 }
 

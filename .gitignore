@@ -23,6 +23,7 @@ dev-dist
 
 # Vite
 .vite
+supabase/.temp/
 
 # Editor directories and files
 .vscode/*

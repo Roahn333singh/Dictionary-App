@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { AutoTextarea } from '../components/AutoTextarea'
 import { LIMITS, useVocab } from '../hooks/useVocab'
 import { enrichWord } from '../lib/enrich'
 import type { WordEnrichment } from '../types'
@@ -250,13 +251,12 @@ export function AddWord() {
 
             <div className="field">
               <label htmlFor="meaning">Meaning (English)</label>
-              <textarea
+              <AutoTextarea
                 id="meaning"
                 value={enrichment.meaning}
                 onChange={(e) => setEnrichment({ ...enrichment, meaning: e.target.value })}
                 placeholder="Definition in simple, clear English..."
                 maxLength={LIMITS.meaning}
-                rows={2}
                 required
                 autoFocus={isManual}
               />
@@ -264,51 +264,47 @@ export function AddWord() {
 
             <div className="field">
               <label htmlFor="meaningHi">Meaning (Hindi)</label>
-              <textarea
+              <AutoTextarea
                 id="meaningHi"
                 value={enrichment.meaningHi}
                 onChange={(e) => setEnrichment({ ...enrichment, meaningHi: e.target.value })}
                 placeholder="हिंदी में अर्थ..."
                 maxLength={LIMITS.meaning}
-                rows={2}
                 className="hindi"
               />
             </div>
 
             <div className="field">
               <label htmlFor="example1">Example sentence 1</label>
-              <textarea
+              <AutoTextarea
                 id="example1"
                 value={enrichment.examples[0]}
                 onChange={(e) => updateExample(0, e.target.value)}
                 placeholder="A natural sentence using the word..."
                 maxLength={LIMITS.example}
-                rows={2}
                 required
               />
             </div>
 
             <div className="field">
               <label htmlFor="example2">Example sentence 2</label>
-              <textarea
+              <AutoTextarea
                 id="example2"
                 value={enrichment.examples[1]}
                 onChange={(e) => updateExample(1, e.target.value)}
                 placeholder="Another spoken example..."
                 maxLength={LIMITS.example}
-                rows={2}
               />
             </div>
 
             <div className="field">
               <label htmlFor="notes">Notes (optional)</label>
-              <textarea
+              <AutoTextarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Personal tip — when you’d use this while speaking…"
                 maxLength={LIMITS.notes}
-                rows={2}
               />
             </div>
 

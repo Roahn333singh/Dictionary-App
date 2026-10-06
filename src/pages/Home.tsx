@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { WordCard } from '../components/WordCard'
+import { WordOfTheDay } from '../components/WordOfTheDay'
 import { useAuth } from '../hooks/useAuth'
 import { useShares } from '../hooks/useShares'
 import { useVocab } from '../hooks/useVocab'
@@ -51,6 +52,8 @@ export function Home() {
           </Link>
         </div>
       </section>
+
+      {session?.user.id && <WordOfTheDay userId={session.user.id} />}
 
       {available && inbox.length > 0 && (
         <Link to="/inbox" className="inbox-banner">

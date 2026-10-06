@@ -1,6 +1,17 @@
 import type { WordEnrichment } from '../types'
 import { supabase } from './supabase'
 
+/** Collapse Gemini/dictionary padding so meaning boxes stay tight. */
+export function compactText(value: string): string {
+  return value
+    .replace(/\r/g, '')
+    .replace(/[\u00a0\u200b\ufeff]/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
 type DefinitionCandidate = {
   word: string
   pos: string
@@ -372,21 +383,27 @@ async function enrichWithAi(word: string): Promise<WordEnrichment | 'not-found' 
     if (!result || result.error || !result.data || result.data.error) return null
     const ai = result.data
     if (ai.found === false) return 'not-found'
-    const meaning = (ai.meaning ?? '').trim()
+    const meaning = compactText(ai.meaning ?? '')
     if (!meaning) return null
 
-    const finalWord = (ai.word ?? '').trim() || word
-    const pos = (ai.partOfSpeech ?? '').trim().toLowerCase() || 'noun'
-    const examples = ensureTwoExamples(finalWord, pos, meaning, [], ai.examples ?? [])
-    let meaningHi = (ai.meaningHi ?? '').trim()
-    if (!meaningHi) meaningHi = await translateToHindi(meaning)
+    const finalWord = compactText(ai.word ?? '') || word
+    const pos = compactText(ai.partOfSpeech ?? '').toLowerCase() || 'noun'
+    const examples = ensureTwoExamples(
+      finalWord,
+      pos,
+      meaning,
+      [],
+      (ai.examples ?? []).map((e) => compactText(e)),
+    )
+    let meaningHi = compactText(ai.meaningHi ?? '')
+    if (!meaningHi) meaningHi = compactText(await translateToHindi(meaning))
 
     return {
       word: finalWord,
       meaning,
       meaningHi,
       examples,
-      phonetic: (ai.phonetic ?? '').trim(),
+      phonetic: compactText(ai.phonetic ?? ''),
       partOfSpeech: pos,
     }
   } catch {
@@ -474,11 +491,11 @@ async function enrichWithFreeDictionaries(trimmed: string): Promise<WordEnrichme
   }
 
   return {
-    word: candidate.word || trimmed,
-    meaning: candidate.definition,
-    meaningHi,
-    examples,
-    phonetic,
-    partOfSpeech: candidate.pos,
+    word: compactText(candidate.word || trimmed),
+    meaning: compactText(candidate.definition),
+    meaningHi: compactText(meaningHi),
+    examples: [compactText(examples[0]), compactText(examples[1])],
+    phonetic: compactText(phonetic),
+    partOfSpeech: compactText(candidate.pos),
   }
 }

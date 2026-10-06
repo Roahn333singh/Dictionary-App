@@ -51,18 +51,29 @@ Return JSON with:
 - examples: exactly 2 natural, everyday English sentences using the word in that sense, 8–20 words each, as spoken in real conversation.`
 }
 
+function compact(value: unknown): string {
+  return String(value ?? '')
+    .replace(/\r/g, '')
+    .replace(/[\u00a0\u200b\ufeff]/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
 function sanitize(raw: Enrichment, fallbackWord: string): Enrichment {
   const examples = (Array.isArray(raw.examples) ? raw.examples : [])
-    .map((e) => String(e).trim())
+    .map((e) => compact(e))
     .filter(Boolean)
     .slice(0, 2)
+  const meaning = compact(raw.meaning)
   return {
-    found: Boolean(raw.found) && Boolean(String(raw.meaning ?? '').trim()),
-    word: String(raw.word || fallbackWord).trim(),
-    partOfSpeech: String(raw.partOfSpeech || '').trim().toLowerCase(),
-    phonetic: String(raw.phonetic || '').trim(),
-    meaning: String(raw.meaning || '').trim(),
-    meaningHi: String(raw.meaningHi || '').trim(),
+    found: Boolean(raw.found) && Boolean(meaning),
+    word: compact(raw.word) || compact(fallbackWord),
+    partOfSpeech: compact(raw.partOfSpeech).toLowerCase(),
+    phonetic: compact(raw.phonetic),
+    meaning,
+    meaningHi: compact(raw.meaningHi),
     examples,
   }
 }
@@ -84,6 +95,7 @@ async function askGemini(word: string, apiKey: string): Promise<Enrichment> {
             contents: [{ role: 'user', parts: [{ text: buildPrompt(word) }] }],
             generationConfig: {
               temperature: 0.2,
+              thinkingConfig: { thinkingBudget: 0 },
               responseMimeType: 'application/json',
               responseSchema,
             },

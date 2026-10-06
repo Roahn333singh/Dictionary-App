@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AutoTextarea } from '../components/AutoTextarea'
 import { ShareIcon } from '../components/Icons'
 import { ShareSheet } from '../components/ShareSheet'
 import { WordCard } from '../components/WordCard'
@@ -242,7 +243,7 @@ export function Library() {
                   </div>
                   <div className="field">
                     <label htmlFor="edit-meaning">English meaning</label>
-                    <textarea
+                    <AutoTextarea
                       id="edit-meaning"
                       value={draft.meaning}
                       maxLength={LIMITS.meaning}
@@ -251,7 +252,7 @@ export function Library() {
                   </div>
                   <div className="field">
                     <label htmlFor="edit-meaning-hi">Hindi meaning</label>
-                    <textarea
+                    <AutoTextarea
                       id="edit-meaning-hi"
                       className="hindi"
                       value={draft.meaningHi}
@@ -261,7 +262,7 @@ export function Library() {
                   </div>
                   <div className="field">
                     <label htmlFor="edit-ex1">Example 1</label>
-                    <textarea
+                    <AutoTextarea
                       id="edit-ex1"
                       value={draft.example1}
                       maxLength={LIMITS.example}
@@ -270,7 +271,7 @@ export function Library() {
                   </div>
                   <div className="field">
                     <label htmlFor="edit-ex2">Example 2</label>
-                    <textarea
+                    <AutoTextarea
                       id="edit-ex2"
                       value={draft.example2}
                       maxLength={LIMITS.example}
@@ -279,7 +280,7 @@ export function Library() {
                   </div>
                   <div className="field">
                     <label htmlFor="edit-notes">Notes</label>
-                    <textarea
+                    <AutoTextarea
                       id="edit-notes"
                       value={draft.notes}
                       maxLength={LIMITS.notes}

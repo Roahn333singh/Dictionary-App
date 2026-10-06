@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { compactText } from '../lib/enrich'
 import type { VocabWord } from '../types'
 
 type WordCardProps = {
@@ -25,9 +26,9 @@ export function WordCard({ word, onOpen }: WordCardProps) {
 
         {revealed && (
           <div className="meaning-reveal">
-            <div className="word-meaning">{word.meaning}</div>
-            {word.meaningHi && (
-              <div className="word-meaning hindi-text">{word.meaningHi}</div>
+            <div className="word-meaning">{compactText(word.meaning)}</div>
+            {compactText(word.meaningHi) && (
+              <div className="word-meaning hindi-text">{compactText(word.meaningHi)}</div>
             )}
             {onOpen && (
               <button

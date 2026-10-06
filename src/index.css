@@ -696,6 +696,61 @@ code {
 
 /* ---------- metrics ---------- */
 
+.wotd {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1.4rem;
+  padding: 1.1rem 1.15rem 1.15rem;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  border: var(--bw) solid var(--edge);
+  box-shadow: 5px 5px 0 var(--yellow);
+}
+
+.wotd-word {
+  justify-self: start;
+  padding: 0 0.12em;
+  margin-left: -0.12em;
+  border: 0;
+  background: none;
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 8vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background-image: linear-gradient(
+    transparent 62%,
+    color-mix(in srgb, var(--accent) 82%, white) 62%,
+    color-mix(in srgb, var(--accent) 82%, white) 94%,
+    transparent 94%
+  );
+  background-repeat: no-repeat;
+  background-size: 0 100%;
+  transition: background-size 0.28s ease;
+}
+
+.wotd-word.is-on,
+.wotd-word:hover:not(:disabled) {
+  background-size: 100% 100%;
+}
+
+.wotd-word:disabled {
+  cursor: wait;
+}
+
+.wotd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -884,16 +939,29 @@ code {
 }
 
 .word-title-btn {
-  padding: 0;
+  padding: 0 0.12em;
+  margin-left: -0.12em;
   border: 0;
   background: none;
   text-align: left;
   cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background-image: linear-gradient(
+    transparent 62%,
+    color-mix(in srgb, var(--accent) 82%, white) 62%,
+    color-mix(in srgb, var(--accent) 82%, white) 94%,
+    transparent 94%
+  );
+  background-repeat: no-repeat;
+  background-size: 0 100%;
+  transition: background-size 0.28s ease;
 }
 
+.word-row.is-revealed .word-title-btn,
 .word-title-btn:hover {
-  text-decoration: underline wavy var(--pink) 2px;
-  text-underline-offset: 5px;
+  background-size: 100% 100%;
+  text-decoration: none;
 }
 
 .word-pos {
@@ -1086,8 +1154,10 @@ input:disabled {
 
 textarea {
   resize: vertical;
-  min-height: 76px;
+  min-height: 0;
   line-height: 1.5;
+  field-sizing: content;
+  overflow-x: hidden;
 }
 
 .field-word input {
@@ -1714,7 +1784,8 @@ textarea {
 }
 
 .share-word {
-  padding: 0;
+  padding: 0 0.12em;
+  margin-left: -0.12em;
   border: 0;
   background: none;
   text-align: left;
@@ -1725,11 +1796,23 @@ textarea {
   line-height: 1.05;
   overflow-wrap: anywhere;
   cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background-size: 0 100%;
+  transition: background-size 0.28s ease;
 }
 
-.share-word:hover {
-  text-decoration: underline wavy var(--pink) 2px;
-  text-underline-offset: 6px;
+.share-word:hover,
+.share-word[aria-expanded='true'] {
+  background-image: linear-gradient(
+    transparent 62%,
+    color-mix(in srgb, var(--accent) 82%, white) 62%,
+    color-mix(in srgb, var(--accent) 82%, white) 94%,
+    transparent 94%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  text-decoration: none;
 }
 
 .share-note {
