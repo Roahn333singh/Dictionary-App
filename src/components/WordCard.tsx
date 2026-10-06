@@ -20,7 +20,7 @@ export function WordCard({ word, onOpen }: WordCardProps) {
           aria-expanded={revealed}
           title={revealed ? 'Hide meaning' : 'Reveal meaning'}
         >
-          {word.word}
+          <span className="mark">{word.word}</span>
         </button>
         {word.partOfSpeech && <span className="word-pos">{word.partOfSpeech}</span>}
 

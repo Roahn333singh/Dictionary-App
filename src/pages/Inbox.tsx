@@ -28,7 +28,7 @@ function ShareCard({ share, from }: { share: Share; from: string }) {
         aria-expanded={revealed}
         title={revealed ? 'Hide meaning' : 'Reveal meaning'}
       >
-        {share.word}
+        <span className="mark">{share.word}</span>
       </button>
 
       {share.note && <p className="share-note">“{share.note}”</p>}

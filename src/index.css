@@ -709,8 +709,7 @@ code {
 
 .wotd-word {
   justify-self: start;
-  padding: 0 0.12em;
-  margin-left: -0.12em;
+  padding: 0;
   border: 0;
   background: none;
   font-family: var(--font-display);
@@ -721,22 +720,6 @@ code {
   text-align: left;
   cursor: pointer;
   overflow-wrap: anywhere;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  background-image: linear-gradient(
-    transparent 62%,
-    color-mix(in srgb, var(--accent) 82%, white) 62%,
-    color-mix(in srgb, var(--accent) 82%, white) 94%,
-    transparent 94%
-  );
-  background-repeat: no-repeat;
-  background-size: 0 100%;
-  transition: background-size 0.28s ease;
-}
-
-.wotd-word.is-on,
-.wotd-word:hover:not(:disabled) {
-  background-size: 100% 100%;
 }
 
 .wotd-word:disabled {
@@ -913,6 +896,18 @@ code {
     border-color 0.15s;
 }
 
+.word-list > .word-row:nth-child(3n + 1) {
+  background: color-mix(in srgb, var(--pink) 10%, var(--card));
+}
+
+.word-list > .word-row:nth-child(3n + 2) {
+  background: color-mix(in srgb, var(--cyan) 11%, var(--card));
+}
+
+.word-list > .word-row:nth-child(3n + 3) {
+  background: color-mix(in srgb, var(--yellow) 12%, var(--card));
+}
+
 .word-row:hover {
   transform: translate(-1px, -1px);
   box-shadow: var(--lift) var(--lift) 0 var(--shadow);
@@ -939,29 +934,50 @@ code {
 }
 
 .word-title-btn {
-  padding: 0 0.12em;
-  margin-left: -0.12em;
+  padding: 0;
   border: 0;
   background: none;
   text-align: left;
   cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  background-image: linear-gradient(
-    transparent 62%,
-    color-mix(in srgb, var(--accent) 82%, white) 62%,
-    color-mix(in srgb, var(--accent) 82%, white) 94%,
-    transparent 94%
-  );
-  background-repeat: no-repeat;
-  background-size: 0 100%;
-  transition: background-size 0.28s ease;
 }
 
-.word-row.is-revealed .word-title-btn,
-.word-title-btn:hover {
-  background-size: 100% 100%;
-  text-decoration: none;
+.mark {
+  display: inline;
+  padding: 0.1em 0.2em;
+  margin: 0 -0.05em;
+  border-radius: 0.2em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  background-color: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.word-row.is-revealed .mark,
+.word-title-btn:hover .mark,
+.wotd-word.is-on .mark,
+.wotd-word:hover:not(:disabled) .mark,
+.share-word[aria-expanded='true'] .mark,
+.share-word:hover .mark {
+  background-color: #ffe566;
+  mix-blend-mode: multiply;
+  color: #1a1408;
+}
+
+[data-theme='ink'] .word-row.is-revealed .mark,
+[data-theme='ink'] .word-title-btn:hover .mark,
+[data-theme='ink'] .wotd-word.is-on .mark,
+[data-theme='ink'] .wotd-word:hover:not(:disabled) .mark,
+[data-theme='ink'] .share-word[aria-expanded='true'] .mark,
+[data-theme='ink'] .share-word:hover .mark,
+[data-theme='ember'] .word-row.is-revealed .mark,
+[data-theme='ember'] .word-title-btn:hover .mark,
+[data-theme='ember'] .wotd-word.is-on .mark,
+[data-theme='ember'] .wotd-word:hover:not(:disabled) .mark,
+[data-theme='ember'] .share-word[aria-expanded='true'] .mark,
+[data-theme='ember'] .share-word:hover .mark {
+  background-color: color-mix(in srgb, #ffe14d 58%, transparent);
+  mix-blend-mode: overlay;
+  color: #fff8dc;
 }
 
 .word-pos {
@@ -1867,8 +1883,7 @@ textarea {
 }
 
 .share-word {
-  padding: 0 0.12em;
-  margin-left: -0.12em;
+  padding: 0;
   border: 0;
   background: none;
   text-align: left;
@@ -1879,23 +1894,6 @@ textarea {
   line-height: 1.05;
   overflow-wrap: anywhere;
   cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  background-size: 0 100%;
-  transition: background-size 0.28s ease;
-}
-
-.share-word:hover,
-.share-word[aria-expanded='true'] {
-  background-image: linear-gradient(
-    transparent 62%,
-    color-mix(in srgb, var(--accent) 82%, white) 62%,
-    color-mix(in srgb, var(--accent) 82%, white) 94%,
-    transparent 94%
-  );
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  text-decoration: none;
 }
 
 .share-note {

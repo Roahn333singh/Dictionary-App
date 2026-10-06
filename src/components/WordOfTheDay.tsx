@@ -149,7 +149,7 @@ export function WordOfTheDay({ userId }: { userId: string }) {
         aria-expanded={revealed}
         disabled={loading}
       >
-        {title}
+        <span className="mark">{title}</span>
       </button>
       {enrichment?.phonetic && <p className="muted">{enrichment.phonetic}</p>}
 
