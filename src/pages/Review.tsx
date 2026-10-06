@@ -8,14 +8,19 @@ import type { ReviewRating, VocabWord } from '../types'
 const SWIPE_PX = 72
 const SWIPE_VX = 0.55
 
+type Axis = 'x' | 'y'
+
 type Drag = {
   id: number
   startX: number
   startY: number
   lastX: number
+  lastY: number
   lastT: number
   vx: number
+  vy: number
   armed: boolean
+  axis: Axis | null
 }
 
 function CardFace({
@@ -135,26 +140,34 @@ export function Review() {
     }
   }
 
-  function paint(x: number) {
+  function paint(x: number, y: number, axis: Axis) {
     const el = frontRef.current
     if (!el) return
     const w = el.offsetWidth || 320
-    const nx = x / w
-    const rotY = Math.max(-42, Math.min(42, -nx * 58))
-    const rotZ = nx * 10
-    const lift = Math.min(18, Math.abs(x) / 16)
+    const h = el.offsetHeight || 280
     el.style.transition = 'none'
-    el.style.transform = `translate3d(${x}px, ${-lift}px, 40px) rotateY(${rotY}deg) rotateZ(${rotZ}deg)`
+    if (axis === 'y') {
+      const ny = y / h
+      const rotX = Math.max(-38, Math.min(38, ny * 52))
+      el.style.transform = `translate3d(0, ${y}px, 40px) rotateX(${-rotX}deg)`
+    } else {
+      const nx = x / w
+      const rotY = Math.max(-42, Math.min(42, -nx * 58))
+      const rotZ = nx * 10
+      const lift = Math.min(18, Math.abs(x) / 16)
+      el.style.transform = `translate3d(${x}px, ${-lift}px, 40px) rotateY(${rotY}deg) rotateZ(${rotZ}deg)`
+    }
     const glow = glowRef.current
     if (glow) {
-      const p = Math.min(1, Math.abs(x) / 90)
+      const dist = axis === 'y' ? Math.abs(y) : Math.abs(x)
+      const p = Math.min(1, dist / 120)
       glow.style.transition = 'none'
-      glow.style.opacity = String(0.25 + p * 0.75)
-      glow.style.setProperty('--rainbow-angle', `${(x * 1.6 + 40) % 360}deg`)
+      glow.style.opacity = String(p * 0.42)
+      glow.style.setProperty('--rainbow-angle', `${((axis === 'y' ? y : x) * 1.2 + 40) % 360}deg`)
     }
   }
 
-  function goTo(nextIndex: number, dir: 1 | -1) {
+  function goTo(nextIndex: number, dir: 1 | -1, axis: Axis = 'x') {
     if (flippingRef.current) return
     if (nextIndex < 0 || nextIndex > totalRef.current) return
     if (nextIndex === indexRef.current) return
@@ -163,10 +176,19 @@ export function Review() {
     turnPageFx()
     const el = frontRef.current
     if (el) {
-      const fly = dir === 1 ? -window.innerWidth * 0.72 : window.innerWidth * 0.72
       el.style.transition = 'transform 0.32s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.32s ease'
-      el.style.transform = `translate3d(${fly}px, -12px, 80px) rotateY(${dir === 1 ? -88 : 88}deg) rotateZ(${dir === 1 ? -12 : 12}deg)`
+      if (axis === 'y') {
+        const fly = dir === 1 ? -window.innerHeight * 0.7 : window.innerHeight * 0.45
+        el.style.transform = `translate3d(0, ${fly}px, 80px) rotateX(${dir === 1 ? 70 : -55}deg)`
+      } else {
+        const fly = dir === 1 ? -window.innerWidth * 0.72 : window.innerWidth * 0.72
+        el.style.transform = `translate3d(${fly}px, -12px, 80px) rotateY(${dir === 1 ? -88 : 88}deg) rotateZ(${dir === 1 ? -12 : 12}deg)`
+      }
       el.style.opacity = '0'
+    }
+    if (glowRef.current) {
+      glowRef.current.style.transition = 'opacity 0.2s ease'
+      glowRef.current.style.opacity = '0'
     }
     window.setTimeout(() => {
       setIndex(nextIndex)
@@ -176,7 +198,11 @@ export function Review() {
         if (!card) return
         card.style.transition = 'none'
         card.style.opacity = '1'
-        card.style.transform = `translate3d(${dir === 1 ? 40 : -40}px, 8px, 0) rotateY(${dir === 1 ? 12 : -12}deg)`
+        if (axis === 'y') {
+          card.style.transform = `translate3d(0, ${dir === 1 ? 36 : -36}px, 0) rotateX(${dir === 1 ? -10 : 10}deg)`
+        } else {
+          card.style.transform = `translate3d(${dir === 1 ? 40 : -40}px, 8px, 0) rotateY(${dir === 1 ? 12 : -12}deg)`
+        }
         requestAnimationFrame(() => {
           card.style.transition = 'transform 0.28s var(--ease-pop)'
           card.style.transform = 'none'
@@ -185,21 +211,24 @@ export function Review() {
     }, 280)
   }
 
-  function settle(x: number, vx: number) {
-    const width = frontRef.current?.offsetWidth || 320
-    const pass = Math.abs(x) > Math.min(SWIPE_PX, width * 0.22) || Math.abs(vx) > SWIPE_VX
+  function settle(x: number, y: number, vx: number, vy: number, axis: Axis) {
+    const el = frontRef.current
+    const size = axis === 'y' ? el?.offsetHeight || 280 : el?.offsetWidth || 320
+    const dist = axis === 'y' ? y : x
+    const vel = axis === 'y' ? vy : vx
+    const pass = Math.abs(dist) > Math.min(SWIPE_PX, size * 0.2) || Math.abs(vel) > SWIPE_VX
     if (!pass) {
       resetFront('transform 0.35s var(--ease-pop)', 'none')
       return
     }
-    const dir: 1 | -1 = x < 0 || vx < -SWIPE_VX ? 1 : -1
+    const dir: 1 | -1 = dist < 0 || vel < -SWIPE_VX ? 1 : -1
     const next = indexRef.current + dir
     if (next < 0 || next > totalRef.current) {
       resetFront('transform 0.4s var(--ease-pop)', 'none')
       haptic(8)
       return
     }
-    goTo(next, dir)
+    goTo(next, dir, axis)
   }
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
@@ -211,9 +240,12 @@ export function Review() {
       startX: e.clientX,
       startY: e.clientY,
       lastX: e.clientX,
+      lastY: e.clientY,
       lastT: performance.now(),
       vx: 0,
+      vy: 0,
       armed: false,
+      axis: null,
     }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
@@ -224,11 +256,8 @@ export function Review() {
     const dx = e.clientX - d.startX
     const dy = e.clientY - d.startY
     if (!d.armed) {
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return
-      if (Math.abs(dy) > Math.abs(dx) * 1.2) {
-        dragRef.current = null
-        return
-      }
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return
+      d.axis = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x'
       d.armed = true
       haptic(7)
       e.currentTarget.classList.add('is-dragging')
@@ -236,11 +265,16 @@ export function Review() {
     const now = performance.now()
     const dt = Math.max(8, now - d.lastT)
     d.vx = (e.clientX - d.lastX) / dt
+    d.vy = (e.clientY - d.lastY) / dt
     d.lastX = e.clientX
+    d.lastY = e.clientY
     d.lastT = now
+    const axis = d.axis ?? 'x'
     let x = dx
-    if (indexRef.current === 0 && x > 0) x *= 0.28
-    paint(x)
+    let y = dy
+    if (axis === 'x' && indexRef.current === 0 && x > 0) x *= 0.28
+    if (axis === 'y' && indexRef.current === 0 && y > 0) y *= 0.28
+    paint(x, y, axis)
   }
 
   function onPointerUp(e: ReactPointerEvent<HTMLDivElement>) {
@@ -253,9 +287,12 @@ export function Review() {
     } catch {
       // already released
     }
-    if (!d.armed) return
-    const x = e.clientX - d.startX
-    settle(indexRef.current === 0 && x > 0 ? x * 0.28 : x, d.vx)
+    if (!d.armed || !d.axis) return
+    let x = e.clientX - d.startX
+    let y = e.clientY - d.startY
+    if (d.axis === 'x' && indexRef.current === 0 && x > 0) x *= 0.28
+    if (d.axis === 'y' && indexRef.current === 0 && y > 0) y *= 0.28
+    settle(x, y, d.vx, d.vy, d.axis)
   }
 
   function rate(rating: ReviewRating) {
@@ -267,8 +304,8 @@ export function Review() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'ArrowRight') goTo(indexRef.current + 1, 1)
-      if (e.key === 'ArrowLeft') goTo(indexRef.current - 1, -1)
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') goTo(indexRef.current + 1, 1, e.key === 'ArrowUp' ? 'y' : 'x')
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') goTo(indexRef.current - 1, -1, e.key === 'ArrowDown' ? 'y' : 'x')
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -341,7 +378,7 @@ export function Review() {
         </div>
       </div>
 
-      <p className="swipe-hint">Swipe to the next card — reveal only if you want to rate it</p>
+      <p className="swipe-hint">Swipe left or up for the next card — reveal only if you want to rate it</p>
 
       {revealed && intervals && (
         <div className="rating-row">

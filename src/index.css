@@ -1352,8 +1352,9 @@ textarea {
   position: relative;
   min-height: 280px;
   perspective: 1400px;
-  touch-action: pan-y;
+  touch-action: none;
   user-select: none;
+  overflow: visible;
 }
 
 .deck.is-dragging {
@@ -1364,9 +1365,10 @@ textarea {
 .deck-front {
   position: relative;
   z-index: 2;
-  transform-origin: 50% 60%;
+  transform-origin: 50% 80%;
   will-change: transform;
   cursor: grab;
+  overflow: visible;
 }
 
 .deck.is-dragging .deck-front {
@@ -1386,22 +1388,30 @@ textarea {
 .deck-rainbow {
   --rainbow-angle: 40deg;
   position: absolute;
-  inset: -8px;
+  inset: -3px;
   z-index: -1;
   border-radius: inherit;
   opacity: 0;
   pointer-events: none;
+  padding: 3px;
   background: conic-gradient(
     from var(--rainbow-angle),
-    #ff4f9a,
-    #ff8a3d,
+    #ff7ad9,
     #ffe14d,
-    #c6ff3d,
-    #3de0ff,
+    #9be15d,
+    #6ee7f9,
     #b79cff,
-    #ff4f9a
+    #ff7ad9
   );
-  filter: blur(14px);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  filter: blur(5px);
 }
 
 .swipe-hint {
