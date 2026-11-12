@@ -55,7 +55,7 @@ function normalizeWord(raw: string): string | null {
 
 export function softHintFromMeaning(word: string, meaning: string): string {
   const cleaned = meaning
-    .replace(new RegExp(word, 'ig'), '…')
+    .replace(new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), '…')
     .replace(/\s+/g, ' ')
     .trim()
   if (!cleaned) return 'A word from your Retain dictionary — trust the vibe.'

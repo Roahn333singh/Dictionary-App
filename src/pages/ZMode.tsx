@@ -1,597 +1,261 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import type { CrosswordCell, CrosswordClue, CrosswordPuzzle } from '../lib/crossword'
-import {
-  buildFullJar,
-  clueFullyFilled,
-  clueIsCorrect,
-  cullJarForHint1,
-  HINT1_MAX_USES,
-  hint1Target,
-  shuffleJarPositions,
-  type JarToken,
-} from '../lib/tokenJar'
+import { buildLetterWheel, shuffleWheel } from '../lib/letterWheel'
+import { LetterWheel } from './LetterWheel'
 import {
   computeScore,
   createDailyPuzzle,
   emptyClueState,
-  JAR_HINT_PENALTY,
-  MEANING_HINT_PENALTY,
   loadBestScore,
+  MEANING_HINT_PENALTY,
+  RIDDLE_HINT_PENALTY,
+  riddleForClue,
   saveBestScore,
   type ClueScoreState,
 } from '../lib/zmode'
-
-type Phase = 'play' | 'cleared'
+import './zmode.css'
 
 function emptyStates(puzzle: CrosswordPuzzle): Record<string, ClueScoreState> {
-  const out: Record<string, ClueScoreState> = {}
-  for (const c of puzzle.clues) out[c.id] = emptyClueState()
-  return out
+  return Object.fromEntries(puzzle.clues.map((clue) => [clue.id, emptyClueState()]))
 }
 
-function LetterJar({
-  tokens,
-  filtered,
-  disabled,
-  onPick,
-  onShuffle,
-}: {
-  tokens: JarToken[]
-  filtered: boolean
-  disabled: boolean
-  onPick: (letter: string) => void
-  onShuffle: () => void
-}) {
-  const cols = tokens.length <= 9 ? 3 : tokens.length <= 15 ? 5 : 6
-
-  return (
-    <section className={`z-jar ${filtered ? 'is-filtered' : ''}`} aria-label="Letter jar">
-      <div className="z-jar-head">
-        <h2 className="z-jar-title">Letter Jar</h2>
-        <span className="z-jar-count">
-          {tokens.length} token{tokens.length === 1 ? '' : 's'}
-          {filtered ? ' · culled' : ''}
-        </span>
-      </div>
-
-      <div className="z-jar-vessel" aria-hidden={false}>
-        {/* wooden screw lid */}
-        <div className="z-jar-lid" aria-hidden>
-          <div className="z-jar-lid-knob" />
-          <div className="z-jar-lid-top" />
-          <div className="z-jar-lid-ridges">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-        </div>
-
-        {/* glass bottle */}
-        <div className="z-jar-bottle">
-          <div className="z-jar-neck" aria-hidden />
-          <div className="z-jar-shoulder" aria-hidden />
-          <div className="z-jar-glass">
-            <div className="z-jar-shine" aria-hidden />
-            <div className="z-jar-shine z-jar-shine-r" aria-hidden />
-            <div
-              className="z-jar-tokens"
-              style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-            >
-              {tokens.map((token) => (
-                <button
-                  key={token.id}
-                  type="button"
-                  className={`z-token z-token-${token.color}`}
-                  style={{ transform: `rotate(${token.rot}deg)` }}
-                  disabled={disabled}
-                  onClick={() => onPick(token.letter)}
-                  aria-label={`Place letter ${token.letter}`}
-                >
-                  <span className="z-token-rim" aria-hidden />
-                  <span className="z-token-face">{token.letter}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="z-jar-base" aria-hidden />
-        </div>
-      </div>
-
-      <p className="z-jar-help">Tap a token to place its letter. Tokens can be reused.</p>
-
-      <div className="z-jar-tools">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onShuffle} disabled={disabled}>
-          Shuffle
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={() => onPick('')}
-          disabled={disabled}
-        >
-          Clear cell
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function ZModeGame() {
-  const { words } = useVocab()
-  const { session } = useAuth()
-  const userId = session?.user.id ?? 'guest'
-
-  const puzzle = useMemo(() => createDailyPuzzle(words, userId), [words, userId])
-
-  const fullJar = useMemo(() => buildFullJar(puzzle, puzzle.seed), [puzzle])
-
-  const [phase, setPhase] = useState<Phase>('play')
-  const [entries, setEntries] = useState<Record<string, string>>({})
-  const [states, setStates] = useState(() => emptyStates(puzzle))
-  const [activeClueId, setActiveClueId] = useState(puzzle.clues[0]?.id ?? '')
-  const [selectedKey, setSelectedKey] = useState(() => {
-    const first = puzzle.clues[0]
-    if (!first) return '0:0'
-    const open = first.cells.find((k) => {
-      const cell = puzzle.cells.find((c) => c.key === k)
-      return cell && !cell.seed
+function ZModeGame({ puzzle, userId }: { puzzle: CrosswordPuzzle; userId: string }) {
+  const cellByKey = useMemo(() => new Map(puzzle.cells.map((cell) => [cell.key, cell])), [puzzle])
+  const { gridCells, columns, rows } = useMemo(() => {
+    const minRow = Math.min(...puzzle.cells.map((cell) => cell.row))
+    const minCol = Math.min(...puzzle.cells.map((cell) => cell.col))
+    const rows = Math.max(...puzzle.cells.map((cell) => cell.row)) - minRow + 1
+    const columns = Math.max(...puzzle.cells.map((cell) => cell.col)) - minCol + 1
+    const gridCells = Array.from({ length: rows * columns }, (_, index) => {
+      const row = minRow + Math.floor(index / columns)
+      const col = minCol + index % columns
+      return cellByKey.get(`${row}:${col}`)
     })
-    return open ?? first.cells[0]!
+    return { gridCells, columns, rows }
+  }, [cellByKey, puzzle.cells])
+  const firstEditable = (clue: CrosswordClue | undefined) =>
+    clue?.cells.find((key) => !cellByKey.get(key)?.seed) ?? clue?.cells[0] ?? ''
+
+  const initialBoard = () => ({
+    entries: {} as Record<string, string>,
+    states: emptyStates(puzzle),
+    activeClueId: puzzle.clues[0]?.id ?? '',
+    selectedKey: firstEditable(puzzle.clues[0]),
+    feedback: '',
   })
-  const [toast, setToast] = useState(
-    'Tap tokens from the jar. Hint 1 culls · Hint 2 soft meaning · Reveal All zeros the board.',
-  )
+  const [board, setBoard] = useState(initialBoard)
+  const { entries, states, activeClueId, selectedKey, feedback } = board
   const [best, setBest] = useState(() => loadBestScore(userId))
-  const [visibleTokens, setVisibleTokens] = useState<JarToken[]>(fullJar)
-  const [jarFiltered, setJarFiltered] = useState(false)
-  const [shuffleTick, setShuffleTick] = useState(0)
+  const [wheelOverrides, setWheelOverrides] = useState<Record<string, string[]>>({})
+  const [hintClueId, setHintClueId] = useState<string | null>(null)
+  const [confirmReveal, setConfirmReveal] = useState(false)
 
-  const cellByKey = useMemo(() => {
-    const m = new Map<string, CrosswordCell>()
-    for (const c of puzzle.cells) m.set(c.key, c)
-    return m
-  }, [puzzle])
-
-  const activeClue = puzzle.clues.find((c) => c.id === activeClueId) ?? puzzle.clues[0]
+  const activeClue = puzzle.clues.find((clue) => clue.id === activeClueId)
+  const hintOpen = hintClueId === activeClueId
   const activeState = activeClue ? states[activeClue.id] : undefined
+  const cleared = puzzle.clues.every((clue) => states[clue.id]?.solved)
   const score = useMemo(() => computeScore(puzzle, states), [puzzle, states])
-
-  const restoreFullJar = useCallback(() => {
-    setVisibleTokens(shuffleJarPositions(fullJar, `restore-${shuffleTick}`))
-    setJarFiltered(false)
-  }, [fullJar, shuffleTick])
-
-  const finishIfComplete = useCallback(
-    (nextEntries: Record<string, string>, nextStates: Record<string, ClueScoreState>) => {
-      const updated = { ...nextStates }
-      for (const clue of puzzle.clues) {
-        if (updated[clue.id]?.revealed) {
-          updated[clue.id] = { ...updated[clue.id], solved: true }
-          continue
-        }
-        if (clueIsCorrect(clue, cellByKey, nextEntries)) {
-          updated[clue.id] = { ...updated[clue.id], solved: true }
-        }
-      }
-
-      const allSolved = puzzle.clues.every((c) => updated[c.id]?.solved)
-      setStates(updated)
-      if (allSolved) {
-        const final = computeScore(puzzle, updated)
-        saveBestScore(userId, final.earned)
-        setBest((b) => Math.max(b, final.earned))
-        setPhase('cleared')
-        setToast(
-          final.earned === final.max
-            ? 'PERFECT CLEAR — clean jar run. Aura maxed.'
-            : `Grid cleared · ${final.earned}/${final.max} pts`,
-        )
-        setVisibleTokens(fullJar)
-        setJarFiltered(false)
-      }
-      return updated
-    },
-    [puzzle, cellByKey, userId, fullJar],
-  )
-
-  const revealClue = useCallback(
-    (
-      clue: CrosswordClue,
-      nextEntries: Record<string, string>,
-      nextStates: Record<string, ClueScoreState>,
-      reason: string,
-    ) => {
-      const filled = { ...nextEntries }
-      for (const key of clue.cells) {
-        filled[key] = cellByKey.get(key)!.letter
-      }
-      const st = {
-        ...nextStates,
-        [clue.id]: { ...nextStates[clue.id], revealed: true, solved: true },
-      }
-      setEntries(filled)
-      setToast(reason)
-      finishIfComplete(filled, st)
-      restoreFullJar()
-    },
-    [cellByKey, finishIfComplete, restoreFullJar],
-  )
-
-  const displayLetter = (cell: CrosswordCell) => {
-    if (cell.seed) return cell.letter
-    const clueIds = [cell.acrossId, cell.downId].filter(Boolean) as string[]
-    if (clueIds.some((id) => states[id]?.revealed)) return cell.letter
-    return (entries[cell.key] ?? '').toUpperCase()
-  }
-
-  const letterTone = (cell: CrosswordCell): 'seed' | 'ok' | 'bad' | 'empty' => {
-    if (cell.seed) return 'seed'
-    const clueIds = [cell.acrossId, cell.downId].filter(Boolean) as string[]
-    if (clueIds.some((id) => states[id]?.revealed)) return 'ok'
-    const typed = (entries[cell.key] ?? '').toUpperCase()
-    if (!typed) return 'empty'
-    return typed === cell.letter ? 'ok' : 'bad'
-  }
-
-  const selectCell = (cell: CrosswordCell, prefer?: 'across' | 'down') => {
-    setSelectedKey(cell.key)
-    const nextId =
-      (prefer === 'down' && cell.downId) ||
-      (prefer === 'across' && cell.acrossId) ||
-      (activeClueId === cell.acrossId || activeClueId === cell.downId
-        ? activeClueId
-        : cell.acrossId || cell.downId || activeClueId)
-    if (nextId && nextId !== activeClueId) {
-      setActiveClueId(nextId)
-      // Leaving a filtered jar when switching clues restores full jar
-      if (jarFiltered) restoreFullJar()
-    }
-  }
-
-  const advance = (fromKey: string, clue: CrosswordClue) => {
-    const idx = clue.cells.indexOf(fromKey)
-    for (let i = idx + 1; i < clue.cells.length; i++) {
-      const cell = cellByKey.get(clue.cells[i]!)
-      if (cell && !cell.seed && !states[clue.id]?.revealed) {
-        setSelectedKey(cell.key)
-        return
-      }
-    }
-  }
-
-  const afterPlace = (
-    nextEntries: Record<string, string>,
-    nextStates: Record<string, ClueScoreState>,
-    clue: CrosswordClue,
-  ) => {
-    if (!clueFullyFilled(clue, cellByKey, nextEntries, Boolean(nextStates[clue.id]?.revealed))) {
-      finishIfComplete(nextEntries, nextStates)
-      return
-    }
-
-    if (clueIsCorrect(clue, cellByKey, nextEntries)) {
-      setToast(`Word ${clue.number} ${clue.direction} locked in.`)
-      finishIfComplete(nextEntries, nextStates)
-      restoreFullJar()
-      return
-    }
-
-    // Wrong full word after Hint1 engagement
-    const st = nextStates[clue.id]!
-    if (st.jarHintUses > 0) {
-      const jarFails = st.jarFails + 1
-      const updated = {
-        ...nextStates,
-        [clue.id]: { ...st, jarFails },
-      }
-      // 3 Hint1 uses exhausted OR 3 wrong completes while Hint1 was used → reveal
-      if (st.jarHintUses >= HINT1_MAX_USES || jarFails >= HINT1_MAX_USES) {
-        revealClue(
-          clue,
-          nextEntries,
-          updated,
-          `Out of jar chances on ${clue.number} ${clue.direction} — word revealed · 0 pts.`,
-        )
-        return
-      }
-      setStates(updated)
-      setToast(
-        `Not that word. Jar chances left: ${HINT1_MAX_USES - Math.max(st.jarHintUses, jarFails)}.`,
-      )
-      return
-    }
-
-    setToast('Not that word — try Hint 1 to cull the jar.')
-    finishIfComplete(nextEntries, nextStates)
-  }
-
-  const placeLetter = (letter: string) => {
-    if (phase !== 'play' || !activeClue) return
-    const cell = cellByKey.get(selectedKey)
-    if (!cell || cell.seed) return
-    if (states[activeClue.id]?.revealed) return
-
-    // Empty string = clear cell
-    if (!letter) {
-      const next = { ...entries }
-      delete next[cell.key]
-      setEntries(next)
-      return
-    }
-
-    const L = letter.toUpperCase()
-    const next = { ...entries, [cell.key]: L }
-    setEntries(next)
-    afterPlace(next, states, activeClue)
-    advance(cell.key, activeClue)
-  }
-
-  const useHint1 = () => {
-    if (!activeClue || phase !== 'play') return
-    const st = states[activeClue.id] ?? emptyClueState()
-    if (st.revealed || st.solved) return
-
-    if (st.jarHintUses >= HINT1_MAX_USES) {
-      setToast('No Hint 1 uses left on this word — one wrong fill reveals it.')
-      return
-    }
-
-    const target = hint1Target(activeClue, cellByKey, entries)
-    const culled = cullJarForHint1(fullJar, target, `${activeClue.id}-${st.jarHintUses + 1}`)
-    setVisibleTokens(culled)
-    setJarFiltered(true)
-
-    const jarHintUses = st.jarHintUses + 1
-    setStates((prev) => ({
-      ...prev,
-      [activeClue.id]: { ...prev[activeClue.id], jarHintUses },
-    }))
-
-    const left = HINT1_MAX_USES - jarHintUses
-    setToast(
-      left > 0
-        ? `Hint 1 · jar culled to ${culled.length} (−${JAR_HINT_PENALTY} pts). ${left} cull${left === 1 ? '' : 's'} left.`
-        : `Hint 1 · final cull (−${JAR_HINT_PENALTY} pts). Nail it or a wrong fill reveals the word.`,
-    )
-  }
-
-  const useHint2 = () => {
-    if (!activeClue || phase !== 'play') return
-    const st = states[activeClue.id] ?? emptyClueState()
-    if (st.meaningHinted) {
-      setToast('Soft meaning already open for this word.')
-      return
-    }
-    if (st.revealed || st.solved) return
-    setStates((prev) => ({
-      ...prev,
-      [activeClue.id]: { ...prev[activeClue.id], meaningHinted: true },
-    }))
-    setToast(`Hint 2 · soft meaning (−${MEANING_HINT_PENALTY} pts).`)
-  }
-
-  const revealAll = () => {
-    if (phase !== 'play') return
-    const nextEntries = { ...entries }
-    for (const cell of puzzle.cells) nextEntries[cell.key] = cell.letter
-    setEntries(nextEntries)
-    const nextStates = { ...states }
-    for (const clue of puzzle.clues) {
-      nextStates[clue.id] = { ...nextStates[clue.id], revealed: true, solved: true }
-    }
-    setToast('Reveal All — no points added for revealed words.')
-    finishIfComplete(nextEntries, nextStates)
-  }
-
-  const resetBoard = () => {
-    setEntries({})
-    setStates(emptyStates(puzzle))
-    setActiveClueId(puzzle.clues[0]?.id ?? '')
-    setSelectedKey(puzzle.clues[0]?.cells[0] ?? '0:0')
-    setPhase('play')
-    setVisibleTokens(shuffleJarPositions(fullJar, 'reset'))
-    setJarFiltered(false)
-    setToast('Fresh try. Same daily grid. Chase a cleaner score.')
-  }
+  const isLocked = (cell: CrosswordCell, clueStates = states) =>
+    cell.seed || Boolean((cell.acrossId && clueStates[cell.acrossId]?.solved) ||
+      (cell.downId && clueStates[cell.downId]?.solved))
+  const wheelLetters = activeClue
+    ? wheelOverrides[activeClue.id] ?? buildLetterWheel(activeClue.answer, `${puzzle.seed}:${activeClue.id}`)
+    : []
 
   useEffect(() => {
-    setVisibleTokens(fullJar)
-  }, [fullJar])
+    if (!cleared) return
+    saveBestScore(userId, score.earned)
+    setBest((previous) => Math.max(previous, score.earned))
+  }, [cleared, score.earned, userId])
 
-  const rows = puzzle.size
-  const cols = puzzle.size
-  const gridCells: Array<CrosswordCell | null> = []
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      gridCells.push(cellByKey.get(`${r}:${c}`) ?? null)
+  function selectCell(cell: CrosswordCell) {
+    const crossing = cell.key === selectedKey && cell.acrossId && cell.downId
+    const currentFits = activeClueId === cell.acrossId || activeClueId === cell.downId
+    const nextId = crossing
+      ? activeClueId === cell.acrossId ? cell.downId : cell.acrossId
+      : currentFits ? activeClueId : cell.acrossId ?? cell.downId
+    setBoard((current) => ({
+      ...current,
+      selectedKey: cell.key,
+      activeClueId: nextId ?? current.activeClueId,
+      feedback: '',
+    }))
+    if (nextId !== activeClueId) {
+      setHintClueId(null)
+      setConfirmReveal(false)
     }
   }
 
-  const jarChancesLeft = activeState
-    ? Math.max(0, HINT1_MAX_USES - Math.max(activeState.jarHintUses, activeState.jarFails))
-    : HINT1_MAX_USES
+  function submitWord(word: string) {
+    if (!activeClue || activeState?.solved || cleared) return
+    const clue = activeClue
+    setBoard((current) => {
+      if (current.activeClueId !== clue.id || current.states[clue.id]?.solved) return current
+      if (word !== clue.answer) {
+        const feedback = word.length === clue.answer.length
+          ? 'Try another word.'
+          : `Use ${clue.answer.length} letters.`
+        return { ...current, feedback }
+      }
+
+      const entries = { ...current.entries }
+      clue.cells.forEach((key, index) => { entries[key] = word[index] })
+      const states = { ...current.states }
+      for (const candidate of puzzle.clues) {
+        if (!states[candidate.id]?.solved && candidate.cells.every((key) => {
+          const cell = cellByKey.get(key)!
+          return cell.seed || entries[key] === cell.letter
+        })) {
+          states[candidate.id] = { ...states[candidate.id], solved: true }
+        }
+      }
+
+      const nextClue = puzzle.clues.find((candidate) => !states[candidate.id]?.solved)
+      const openCell = nextClue?.cells.find((key) => !isLocked(cellByKey.get(key)!, states))
+      return {
+        entries,
+        states,
+        activeClueId: nextClue?.id ?? clue.id,
+        selectedKey: openCell ?? current.selectedKey,
+        feedback: 'Word solved.',
+      }
+    })
+  }
+
+  function unlockHint(kind: 'riddleHinted' | 'meaningHinted') {
+    if (!activeClue || !activeState || activeState.solved || activeState[kind]) return
+    setBoard((current) => ({
+      ...current,
+      states: { ...current.states, [activeClue.id]: { ...current.states[activeClue.id], [kind]: true } },
+    }))
+  }
+
+  function revealAll() {
+    const filled = Object.fromEntries(puzzle.cells.map((cell) => [cell.key, cell.letter]))
+    const updated = Object.fromEntries(puzzle.clues.map((clue) => {
+      const state = states[clue.id]
+      return [clue.id, { ...state, revealed: true, solved: true }]
+    }))
+    setBoard((current) => ({ ...current, entries: filled, states: updated, feedback: '' }))
+    setHintClueId(null)
+    setConfirmReveal(false)
+  }
+
+  function resetBoard() {
+    setBoard(initialBoard())
+    setWheelOverrides({})
+    setHintClueId(null)
+    setConfirmReveal(false)
+  }
 
   return (
     <div className="zmode">
       <header className="z-top">
         <div>
-          <p className="eyebrow z-eyebrow">Z-MODE · LETTER JAR</p>
-          <h1 className="z-title">
-            Crossword <span className="highlight">unlocked</span>
-          </h1>
+          <p className="eyebrow z-eyebrow">Z-mode · Daily grid</p>
+          <h1 className="z-title">Daily <span className="highlight">crossword</span></h1>
         </div>
-        <Link to="/" className="btn btn-ghost btn-sm">
-          Exit
-        </Link>
+        <Link to="/" className="btn btn-ghost btn-sm">Exit</Link>
       </header>
 
-      <div className="z-scorebar" aria-live="polite">
-        <div className="z-score-pill">
-          <span className="z-score-label">Score</span>
-          <strong>
-            {score.earned}
-            <span className="z-score-max">/{score.max}</span>
-          </strong>
-        </div>
-        <div className="z-score-pill">
-          <span className="z-score-label">Best today</span>
-          <strong>{Math.max(best, score.earned)}</strong>
-        </div>
-        <div className="z-score-pill">
-          <span className="z-score-label">Jar hints</span>
-          <strong>{score.jarHintsUsed}</strong>
-        </div>
-        <div className="z-score-pill">
-          <span className="z-score-label">Reveals</span>
-          <strong>{score.revealsUsed}</strong>
-        </div>
-      </div>
-
-      {toast && (
-        <p className="z-toast" role="status">
-          {toast}
-        </p>
-      )}
-
-      {phase === 'cleared' && (
-        <div className="z-cleared">
-          <h2>Grid cleared</h2>
-          <p>
-            You scored <strong>{score.earned}</strong> of {score.max}. Hint 1 −{JAR_HINT_PENALTY} each ·
-            Hint 2 −{MEANING_HINT_PENALTY} · revealed words score 0.
-          </p>
-          <div className="cta-row">
-            <button type="button" className="btn btn-primary" onClick={resetBoard}>
-              Rematch
-            </button>
-            <Link to="/" className="btn btn-ghost">
-              Back home
-            </Link>
-          </div>
-        </div>
-      )}
-
-      <div className="z-stage z-stage-jar">
+      <div className="z-stage">
         <div className="z-board-wrap">
-          <div
-            className="z-board"
-            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-            role="grid"
-            aria-label="Crossword board"
-          >
-            {gridCells.map((cell, i) => {
-              if (!cell) {
-                return <div key={`b-${i}`} className="z-cell z-cell-block" aria-hidden />
-              }
-              const selected = selectedKey === cell.key
-              const inActive =
-                cell.acrossId === activeClueId || cell.downId === activeClueId
-              const tone = letterTone(cell)
+          <div className="z-board"
+            style={{
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              '--z-board-ratio': columns / rows,
+            } as CSSProperties}
+            role="group" aria-label="Crossword board">
+            {gridCells.map((cell, index) => {
+              if (!cell) return <div key={index} className="z-cell z-cell-block" aria-hidden="true" />
+              const letter = cell.seed ? cell.letter : entries[cell.key] ?? ''
+              const selected = !cleared && selectedKey === cell.key
+              const active = !cleared && activeClue?.cells.includes(cell.key)
+              const tone = cell.seed ? 'seed' : letter ? 'solved' : 'empty'
               return (
-                <button
-                  key={cell.key}
-                  type="button"
-                  role="gridcell"
-                  className={[
-                    'z-cell',
-                    selected ? 'is-selected' : '',
-                    inActive ? 'is-active' : '',
-                    `is-${tone}`,
-                    cell.seed ? 'is-seed' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  onClick={() => {
-                    if (selected && cell.acrossId && cell.downId) {
-                      const flip = activeClue?.direction === 'across' ? 'down' : 'across'
-                      selectCell(cell, flip)
-                    } else {
-                      selectCell(cell)
-                    }
-                  }}
-                >
+                <button key={cell.key} type="button"
+                  className={`z-cell is-${tone}${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
+                  onClick={() => selectCell(cell)} disabled={cleared} aria-pressed={selected}
+                  aria-label={`Row ${cell.row + 1}, column ${cell.col + 1}, ${letter || 'blank'}${isLocked(cell) ? ', fixed' : ''}`}>
                   {cell.number != null && <span className="z-cell-num">{cell.number}</span>}
-                  <span className="z-cell-letter">{displayLetter(cell)}</span>
+                  <span className="z-cell-letter">{letter}</span>
                 </button>
               )
             })}
           </div>
 
-          {activeClue && (
-            <p className="z-active-meta">
-              Playing <strong>{activeClue.number} {activeClue.direction}</strong> ·{' '}
-              {activeClue.answer.length} letters · jar chances {jarChancesLeft}/{HINT1_MAX_USES}
-            </p>
+          {!cleared && activeClue && (
+            <div className="z-clue">
+              <div className="z-clue-row">
+                <p><strong>{activeClue.number} {activeClue.direction}</strong> · {activeClue.answer.length} letters</p>
+                <p className="z-feedback" role="status">{feedback}</p>
+                <button type="button" className="z-quiet-action" aria-expanded={hintOpen}
+                  aria-controls="z-help" onClick={() => {
+                    setHintClueId(hintOpen ? null : activeClueId)
+                    setConfirmReveal(false)
+                  }}>Hint</button>
+              </div>
+              <div id="z-help" className="z-help" hidden={!hintOpen}>
+                <div className="z-help-actions">
+                  <button type="button" className="btn btn-ghost btn-sm"
+                    disabled={activeState?.solved || activeState?.riddleHinted}
+                    onClick={() => unlockHint('riddleHinted')}>Riddle · −{RIDDLE_HINT_PENALTY}</button>
+                  <button type="button" className="btn btn-ghost btn-sm"
+                    disabled={activeState?.solved || activeState?.meaningHinted}
+                    onClick={() => unlockHint('meaningHinted')}>Meaning · −{MEANING_HINT_PENALTY}</button>
+                </div>
+                <div aria-live="polite">
+                  {activeState?.riddleHinted && <p className="z-help-copy"><strong>Riddle</strong>{riddleForClue(activeClue)}</p>}
+                  {activeState?.meaningHinted && <p className="z-help-copy"><strong>Meaning</strong>{activeClue.softHint}</p>}
+                </div>
+                {confirmReveal ? (
+                  <div className="z-reveal-confirm">
+                    <p>Reveal the grid? This run will score zero.</p>
+                    <div className="z-help-actions">
+                      <button type="button" className="z-quiet-action" onClick={() => setConfirmReveal(false)}>Cancel</button>
+                      <button type="button" className="z-quiet-action" onClick={revealAll}>Reveal grid</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="z-quiet-action z-reveal" onClick={() => setConfirmReveal(true)}>Reveal grid</button>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
-        <aside className="z-side">
-          <LetterJar
-            tokens={visibleTokens}
-            filtered={jarFiltered}
-            disabled={phase !== 'play'}
-            onPick={placeLetter}
-            onShuffle={() => {
-              setShuffleTick((n) => n + 1)
-              setVisibleTokens((prev) => shuffleJarPositions(prev, `fun-${shuffleTick + 1}`))
-              setToast('Jar shuffled — same letters, new chaos.')
-            }}
-          />
-
-          <section className="z-hintbar">
-            {activeState?.meaningHinted && activeClue ? (
-              <p className="z-hint-body">{activeClue.softHint}</p>
-            ) : null}
-            <div className="z-hintbar-actions">
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={useHint1}
-                disabled={
-                  phase !== 'play' ||
-                  !activeClue ||
-                  Boolean(activeState?.revealed || activeState?.solved) ||
-                  (activeState?.jarHintUses ?? 0) >= HINT1_MAX_USES
-                }
-              >
-                Hint 1
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={useHint2}
-                disabled={
-                  phase !== 'play' ||
-                  !activeClue ||
-                  Boolean(activeState?.meaningHinted || activeState?.revealed || activeState?.solved)
-                }
-              >
-                Hint 2
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger btn-sm"
-                onClick={revealAll}
-                disabled={phase !== 'play'}
-              >
-                Reveal all
-              </button>
-            </div>
-            <p className="z-rules">
-              Hint 1 −{JAR_HINT_PENALTY} · Hint 2 −{MEANING_HINT_PENALTY} · Reveal = 0 pts
-            </p>
+        {cleared ? (
+          <section className="z-cleared" aria-labelledby="z-recap-title">
+            <h2 id="z-recap-title">{score.revealsUsed ? 'Grid revealed' : 'Grid cleared'}</h2>
+            <p className="z-recap-score"><strong>{score.earned}</strong> / {score.max} points</p>
+            <dl className="z-recap-stats">
+              <div><dt>Best today</dt><dd>{best}</dd></div>
+              <div><dt>Hints used</dt><dd>{score.riddleHintsUsed + score.meaningHintsUsed}</dd></div>
+              <div><dt>Reveals</dt><dd>{score.revealsUsed}</dd></div>
+            </dl>
+            <button type="button" className="btn btn-primary btn-sm" onClick={resetBoard}>Play again</button>
           </section>
-        </aside>
+        ) : activeClue ? (
+          <LetterWheel key={activeClue.id} letters={wheelLetters} answerLength={activeClue.answer.length}
+            disabled={Boolean(activeState?.solved)} onSubmit={submitWord}
+            onShuffle={() => setWheelOverrides((previous) => ({
+              ...previous,
+              [activeClue.id]: shuffleWheel(wheelLetters),
+            }))} />
+        ) : null}
       </div>
     </div>
   )
 }
 
 export default function ZMode() {
-  return <ZModeGame />
+  const { words } = useVocab()
+  const { session } = useAuth()
+  const userId = session?.user.id ?? 'guest'
+  const puzzle = useMemo(() => createDailyPuzzle(words, userId), [words, userId])
+  const puzzleKey = [puzzle.seed, ...puzzle.clues.map((clue) => clue.id)].join(':')
+  return <ZModeGame key={puzzleKey} puzzle={puzzle} userId={userId} />
 }

@@ -22,6 +22,7 @@ export function Layout() {
   const inboxCount = available ? inbox.length : 0
   const navigate = useNavigate()
   const location = useLocation()
+  const inZMode = location.pathname === '/z' || location.pathname === '/z/'
   const [zEntry, setZEntry] = useState(false)
 
   useEffect(() => {
@@ -59,7 +60,7 @@ export function Layout() {
   ]
 
   return (
-    <div className="app-shell">
+    <div className={inZMode ? 'app-shell app-shell-zmode' : 'app-shell'}>
       <header className="topnav">
         <NavLink to="/" className="brand" aria-label="Retain home">
           <span className="brand-mark">R</span>
@@ -97,7 +98,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <nav className="tabbar" aria-label="Main">
+      {!inZMode && <nav className="tabbar" aria-label="Main">
         {items.map(({ to, label, icon: Icon, end, primary, badge }) => (
           <NavLink key={to} to={to} end={end} className={primary ? 'tab-primary' : undefined}>
             <span className="tab-icon">
@@ -108,7 +109,7 @@ export function Layout() {
             {primary && <span className="sr-only">{label}</span>}
           </NavLink>
         ))}
-      </nav>
+      </nav>}
 
       <PwaUpdateToast />
       {zEntry && <ZModeEntry onArrive={arriveZMode} onDone={finishZMode} />}
