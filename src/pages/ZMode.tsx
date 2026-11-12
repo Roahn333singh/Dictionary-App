@@ -119,8 +119,8 @@ function ZModeGame({ puzzle, userId }: { puzzle: CrosswordPuzzle; userId: string
         entries,
         states,
         activeClueId: nextClue?.id ?? clue.id,
-        selectedKey: openCell ?? current.selectedKey,
-        feedback: 'Word solved.',
+        selectedKey: openCell ?? nextClue?.cells[0] ?? current.selectedKey,
+        feedback: '',
       }
     })
   }
