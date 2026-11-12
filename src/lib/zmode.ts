@@ -2,6 +2,7 @@ import {
   buildCrossword,
   cluePoints,
   softHintFromMeaning,
+  type CrosswordClue,
   type CrosswordPuzzle,
   type CrosswordWord,
 } from './crossword'
@@ -87,42 +88,53 @@ export const ZMODE_FALLBACK: CrosswordWord[] = [
   },
 ]
 
-/** Hint1 (jar cull) penalty per use. */
-export const JAR_HINT_PENALTY = 20
-/** Hint2 (soft meaning) penalty once per clue. */
+export const RIDDLE_HINT_PENALTY = 20
 export const MEANING_HINT_PENALTY = 25
 
-/** @deprecated use JAR_HINT_PENALTY / MEANING_HINT_PENALTY */
-export const HINT_PENALTY = MEANING_HINT_PENALTY
+const riddles: Record<string, string> = {
+  FOCUS: 'I make the background fade without turning off the lights.',
+  GRIT: 'I’m what keeps your feet moving when motivation has gone home.',
+  FLAIR: 'Two people do the same thing. I’m what makes one worth watching.',
+  CURE: 'I make the patient stop needing me.',
+  OPEN: 'A door becomes this when it makes room for a guest.',
+  TONE: 'I can turn “fine” into a compliment or a warning.',
+  BOLD: 'I raise my hand before I know who else will.',
+  QUICK: 'By the time you look up, I’m already done.',
+  FREE: 'A bird becomes this when the cage door swings wide.',
+  NOSY: 'I treat someone else’s closed door like an invitation.',
+  WORK: 'I turn a plan on paper into something you can use.',
+  WISE: 'I’m what experience leaves behind when you pay attention.',
+  CALM: 'The storm is loud. My heartbeat doesn’t have to be.',
+  SHARP: 'I catch the detail that everyone else missed.',
+  CLEAR: 'I’m what an explanation becomes when the fog lifts.',
+}
+
+export function riddleForClue({ answer }: CrosswordClue): string {
+  if (riddles[answer]) return riddles[answer]
+  const vowels = answer.match(/[AEIOU]/g)?.length ?? 0
+  const vowelClue = vowels === 0 ? 'I have no A, E, I, O or U'
+    : vowels === 1 ? 'I have one A/E/I/O/U vowel' : `I have ${vowels} A/E/I/O/U vowels`
+  const repeats = new Set(answer).size < answer.length
+  return `${vowelClue}, and ${repeats ? 'at least one of my letters comes back' : 'each of my letters appears just once'}.`
+}
 
 export type ClueScoreState = {
-  /** How many times Hint1 (jar cull) was used on this clue (max 3). */
-  jarHintUses: number
-  /** Soft-meaning hint unlocked. */
+  riddleHinted: boolean
   meaningHinted: boolean
-  /** Word was revealed (manual, auto after 3 fails, or reveal-all). */
   revealed: boolean
   solved: boolean
-  /** Wrong full-word fills after Hint1 engaged. */
-  jarFails: number
 }
 
 export type ZModeScore = {
   earned: number
   max: number
-  jarHintsUsed: number
+  riddleHintsUsed: number
   meaningHintsUsed: number
   revealsUsed: number
 }
 
 export function emptyClueState(): ClueScoreState {
-  return {
-    jarHintUses: 0,
-    meaningHinted: false,
-    revealed: false,
-    solved: false,
-    jarFails: 0,
-  }
+  return { riddleHinted: false, meaningHinted: false, revealed: false, solved: false }
 }
 
 export function vocabToCrosswordWords(words: VocabWord[]): CrosswordWord[] {
@@ -160,7 +172,7 @@ export function computeClueEarned(
   if (state.revealed) return 0
   const base = cluePoints(answer)
   const penalty =
-    state.jarHintUses * JAR_HINT_PENALTY + (state.meaningHinted ? MEANING_HINT_PENALTY : 0)
+    (state.riddleHinted ? RIDDLE_HINT_PENALTY : 0) + (state.meaningHinted ? MEANING_HINT_PENALTY : 0)
   return Math.max(0, base - penalty)
 }
 
@@ -169,17 +181,17 @@ export function computeScore(
   states: Record<string, ClueScoreState>,
 ): ZModeScore {
   let earned = 0
-  let jarHintsUsed = 0
+  let riddleHintsUsed = 0
   let meaningHintsUsed = 0
   let revealsUsed = 0
   for (const clue of puzzle.clues) {
     const st = states[clue.id]
-    if (st?.jarHintUses) jarHintsUsed += st.jarHintUses
+    if (st?.riddleHinted) riddleHintsUsed += 1
     if (st?.meaningHinted) meaningHintsUsed += 1
     if (st?.revealed) revealsUsed += 1
     earned += computeClueEarned(clue.answer, st)
   }
-  return { earned, max: maxScore(puzzle), jarHintsUsed, meaningHintsUsed, revealsUsed }
+  return { earned, max: maxScore(puzzle), riddleHintsUsed, meaningHintsUsed, revealsUsed }
 }
 
 const BEST_KEY = 'retain-zmode-best'
