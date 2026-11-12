@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { refreshShares, shareWord, useShares } from '../hooks/useShares'
 import type { VocabWord } from '../types'
+import { AvatarFace } from './AvatarFace'
 import { ShareIcon } from './Icons'
 
 type Props = {
@@ -55,6 +56,9 @@ export function ShareSheet({ word, onClose }: Props) {
       if (sentTo.length) parts.push(`Sent to ${sentTo.join(', ')}`)
       if (already.length) parts.push(`${already.map((r) => nameOf(r.userId)).join(', ')} already ha${already.length === 1 ? 's' : 've'} it waiting`)
       if (failed.length) parts.push(`couldn’t reach ${failed.map((r) => nameOf(r.userId)).join(', ')}`)
+      if (results.some((r) => r.ok && !r.alreadyShared && r.notify === 'failed')) {
+        parts.push('their notification didn’t go out')
+      }
       setDone(parts.join(' · '))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Couldn’t send right now.')
@@ -90,7 +94,10 @@ export function ShareSheet({ word, onClose }: Props) {
           </div>
         ) : friends.length === 0 ? (
           <>
-            <p className="muted">No friends here yet. Send them the app link and ask them to create an account — then they’ll show up here.</p>
+            <p className="muted">
+              No collab partners yet. Open your account menu → <strong>Friends</strong>, invite them
+              by the email on their account, and share once they accept.
+            </p>
             <div className="modal-actions">
               <button className="btn btn-ghost" type="button" onClick={onClose}>
                 Close
@@ -110,9 +117,7 @@ export function ShareSheet({ word, onClose }: Props) {
                     aria-pressed={on}
                     onClick={() => toggle(f.userId)}
                   >
-                    <span className="friend-avatar" aria-hidden>
-                      {f.name.charAt(0).toUpperCase()}
-                    </span>
+                    <AvatarFace avatarId={f.avatarId} name={f.name} size="sm" />
                     {f.name}
                   </button>
                 )

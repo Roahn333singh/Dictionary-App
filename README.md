@@ -17,7 +17,7 @@ A simple, modern English vocabulary app for words you actually want to use when 
 ### 1. Create the database
 
 1. Create a free project at [supabase.com](https://supabase.com) (region **Mumbai** is fastest for India).
-2. Open **SQL Editor → New query**, paste [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. Then do the same with [`supabase/sharing.sql`](supabase/sharing.sql) to turn on sharing words with friends.
+2. Open **SQL Editor → New query**, paste [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. Then do the same with [`supabase/sharing.sql`](supabase/sharing.sql), [`supabase/friends.sql`](supabase/friends.sql), and [`supabase/avatars.sql`](supabase/avatars.sql) so people can invite collab partners, pick Gen Z avatars, and share words. Run [`supabase/push.sql`](supabase/push.sql) as well so a shared word can notify your friend’s phone and badge the home-screen icon.
 
 Row-level security in that file guarantees each user can only read and write their own words.
 
@@ -48,7 +48,41 @@ From Supabase **Project Settings → API**, copy the Project URL and the anon (p
 - Local: copy `.env.example` to `.env.local` and fill both values.
 - DigitalOcean: **App → Settings → your component → Environment Variables** → add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (scope: **Build Time**), then redeploy.
 
-The anon key is safe in the browser; your data is protected by row-level security. Never put the Gemini key or the service-role key in the app.
+The anon key is safe in the browser; your data is protected by row-level security. Never put the Gemini key, the VAPID private key, or the service-role key in the app.
+
+### 5. Turn on word notifications
+
+Notifications are Web Push. Each phone opts in from the installed app (the banner, or the account menu → **Turn on notifications**). iPhone only delivers them when Retain was added to the Home Screen and opened from that icon.
+
+```bash
+npx supabase secrets set --project-ref <your-project-ref> \
+  VAPID_PUBLIC_KEY=<public key> \
+  VAPID_PRIVATE_KEY=<private key> \
+  VAPID_SUBJECT=mailto:retain@users.retain.app
+npx supabase functions deploy notify-share --project-ref <your-project-ref> --no-verify-jwt
+```
+
+Put the same public key in `VITE_VAPID_PUBLIC_KEY` before building. The private key stays in Supabase secrets. Keys for this project are in `.vapid.local` (not committed).
+
+A shared word's notification never names the word — it stays hidden until the recipient scratches the card in their Inbox.
+
+### Send a custom announcement (owner only)
+
+To tell every opted-in phone about a new feature, set the announce secret once and deploy the function:
+
+```bash
+npx supabase secrets set --project-ref <your-project-ref> ANNOUNCE_SECRET=<secret from .announce.local>
+npx supabase functions deploy announce --project-ref <your-project-ref> --no-verify-jwt
+```
+
+Then, from this folder:
+
+```bash
+./send-announcement.sh "New in Retain" "Scratch-and-reveal is here. Open Retain and try today's card."
+./send-announcement.sh "You have a word waiting" "Open your Inbox and scratch to reveal it." "/inbox"
+```
+
+Only someone with `.announce.local` can send these; signed-in users cannot broadcast.
 
 ## Run locally
 
@@ -82,7 +116,7 @@ CLOUDSDK_ACTIVE_CONFIG_NAME=retain gcloud run deploy retain --source . \
 
 1. Deploy or open the app over **HTTPS** (or `localhost` while developing).
 2. On **Android Chrome**: menu → **Install app** / **Add to Home screen**.
-3. On **iPhone Safari**: Share → **Add to Home Screen**.
+3. On **iPhone Safari**: Share → **Add to Home Screen**. Then open Retain from that icon and tap **Turn on** so new words can notify you and show a count on the icon.
 
 ## How to use it
 

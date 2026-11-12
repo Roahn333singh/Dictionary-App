@@ -137,7 +137,6 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const geminiKey = Deno.env.get('GEMINI_API_KEY')
-  if (!geminiKey) return json({ error: 'GEMINI_API_KEY is not set' }, 500)
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
@@ -146,9 +145,11 @@ Deno.serve(async (req) => {
   if (userError || !userData?.user) return json({ error: 'Sign in required' }, 401)
 
   let word = ''
+  let cacheOnly = false
   try {
     const body = await req.json()
     word = String(body?.word ?? '').trim().replace(/\s+/g, ' ')
+    cacheOnly = Boolean(body?.cacheOnly)
   } catch {
     return json({ error: 'Invalid body' }, 400)
   }
@@ -158,6 +159,8 @@ Deno.serve(async (req) => {
 
   const { data: cached } = await admin.from('word_cache').select('data').eq('word', key).maybeSingle()
   if (cached?.data) return json({ ...(cached.data as Enrichment), cached: true })
+  if (cacheOnly) return json({ cached: false, found: false })
+  if (!geminiKey) return json({ error: 'GEMINI_API_KEY is not set' }, 500)
 
   try {
     const result = await askGemini(word, geminiKey)

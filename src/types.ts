@@ -39,6 +39,8 @@ export interface UserStore extends AppData {
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
 
+export type EnrichmentSource = 'dictionary' | 'ai' | 'manual'
+
 export interface WordEnrichment {
   word: string
   meaning: string
@@ -46,4 +48,5 @@ export interface WordEnrichment {
   examples: [string, string]
   phonetic: string
   partOfSpeech: string
+  source?: EnrichmentSource
 }

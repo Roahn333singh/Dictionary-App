@@ -33,7 +33,9 @@ const POS_PRIORITY: Record<string, number> = {
 
 function cleanHtml(html: string): string {
   return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]*>/g, '')
+    .replace(/\.mw-parser-output[\s\S]*?\{[^}]*\}/g, '')
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -177,81 +179,6 @@ async function fetchWiktionary(word: string): Promise<DefinitionCandidate | null
   }
 }
 
-/** Datamuse — reliable CORS JSON fallback with pronunciation tags */
-async function fetchDatamuse(word: string): Promise<DefinitionCandidate | null> {
-  try {
-    const url = `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=d,p,r&max=1`
-    const res = await fetchWithTimeout(url, 4000)
-    if (!res.ok) return null
-    const data = (await res.json()) as {
-      word?: string
-      defs?: string[]
-      tags?: string[]
-    }[]
-    if (!Array.isArray(data) || data.length === 0) return null
-    const item = data[0]
-    const defs = item.defs ?? []
-    if (defs.length === 0) return null
-
-    const firstDefLine = defs[0]
-    const [posCode, ...defParts] = firstDefLine.split('\t')
-    const posMap: Record<string, string> = {
-      n: 'noun',
-      v: 'verb',
-      adj: 'adjective',
-      adv: 'adverb',
-      u: 'interjection',
-    }
-    const pos = posMap[posCode] || 'noun'
-    const def = defParts.join(' ').trim()
-    if (!def) return null
-    const pronTag = (item.tags ?? []).find((t) => t.startsWith('pron:'))
-    const phonetic = pronTag ? `/${pronTag.replace(/^pron:/, '').trim()}/` : ''
-
-    return {
-      word: item.word || word,
-      pos,
-      definition: def,
-      examples: [],
-      phonetic,
-      synonyms: [],
-      score: scoreDefinition(pos, def, false),
-      source: 'Datamuse',
-    }
-  } catch {
-    return null
-  }
-}
-
-async function fetchWikipedia(word: string): Promise<DefinitionCandidate | null> {
-  try {
-    const slug = word.trim().replace(/\s+/g, '_')
-    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(slug)}`
-    const res = await fetchWithTimeout(url, 4000)
-    if (!res.ok) return null
-    const data = (await res.json()) as {
-      type?: string
-      title?: string
-      description?: string
-      extract?: string
-    }
-    if (data.type === 'disambiguation' || !data.extract) return null
-    const def = data.description || `${data.extract.split('.')[0]}.`
-    return {
-      word: data.title || word,
-      pos: 'noun',
-      definition: def,
-      examples: [],
-      phonetic: '',
-      synonyms: [],
-      score: 3,
-      source: 'Wikipedia',
-    }
-  } catch {
-    return null
-  }
-}
-
 async function translateToHindi(text: string): Promise<string> {
   if (!text || !text.trim()) return ''
 
@@ -357,6 +284,7 @@ function ensureTwoExamples(
 
 type AiEnrichment = {
   found?: boolean
+  cached?: boolean
   word?: string
   partOfSpeech?: string
   phonetic?: string
@@ -368,44 +296,49 @@ type AiEnrichment = {
 
 const AI_TIMEOUT_MS = 20_000
 
-/** Gemini via the `enrich` Edge Function. Returns null when unavailable, 'not-found' for non-words. */
-async function enrichWithAi(word: string): Promise<WordEnrichment | 'not-found' | null> {
+function mapAiResult(ai: AiEnrichment, fallbackWord: string): WordEnrichment | 'not-found' | null {
+  if (ai.error) return null
+  if (ai.found === false) return 'not-found'
+  const meaning = compactText(ai.meaning ?? '')
+  if (!meaning) return null
+
+  const finalWord = compactText(ai.word ?? '') || fallbackWord
+  const pos = compactText(ai.partOfSpeech ?? '').toLowerCase() || 'noun'
+  const examples = ensureTwoExamples(
+    finalWord,
+    pos,
+    meaning,
+    [],
+    (ai.examples ?? []).map((e) => compactText(e)),
+  )
+
+  return {
+    word: finalWord,
+    meaning,
+    meaningHi: compactText(ai.meaningHi ?? ''),
+    examples,
+    phonetic: compactText(ai.phonetic ?? ''),
+    partOfSpeech: pos,
+    source: 'ai',
+  }
+}
+
+async function invokeEnrich(
+  body: { word: string; cacheOnly?: boolean },
+  timeoutMs: number,
+): Promise<AiEnrichment | null> {
   if (!supabase) return null
   let timer: number | undefined
   try {
     const timeout = new Promise<null>((resolve) => {
-      timer = window.setTimeout(() => resolve(null), AI_TIMEOUT_MS)
+      timer = window.setTimeout(() => resolve(null), timeoutMs)
     })
     const result = await Promise.race([
-      supabase.functions.invoke<AiEnrichment>('enrich', { body: { word } }),
+      supabase.functions.invoke<AiEnrichment>('enrich', { body }),
       timeout,
     ])
-    if (!result || result.error || !result.data || result.data.error) return null
-    const ai = result.data
-    if (ai.found === false) return 'not-found'
-    const meaning = compactText(ai.meaning ?? '')
-    if (!meaning) return null
-
-    const finalWord = compactText(ai.word ?? '') || word
-    const pos = compactText(ai.partOfSpeech ?? '').toLowerCase() || 'noun'
-    const examples = ensureTwoExamples(
-      finalWord,
-      pos,
-      meaning,
-      [],
-      (ai.examples ?? []).map((e) => compactText(e)),
-    )
-    let meaningHi = compactText(ai.meaningHi ?? '')
-    if (!meaningHi) meaningHi = compactText(await translateToHindi(meaning))
-
-    return {
-      word: finalWord,
-      meaning,
-      meaningHi,
-      examples,
-      phonetic: compactText(ai.phonetic ?? ''),
-      partOfSpeech: pos,
-    }
+    if (!result || result.error || !result.data) return null
+    return result.data
   } catch {
     return null
   } finally {
@@ -413,65 +346,37 @@ async function enrichWithAi(word: string): Promise<WordEnrichment | 'not-found' 
   }
 }
 
-/**
- * Look up a word: Gemini (accurate English + Hindi, cached server-side) first,
- * then free dictionaries (Wiktionary, Datamuse, Wikipedia) as a fallback.
- */
-export async function enrichWord(rawWord: string): Promise<WordEnrichment> {
+/** Gemini via the `enrich` Edge Function. Returns null when unavailable, 'not-found' for non-words. */
+export async function enrichWithAi(word: string): Promise<WordEnrichment | 'not-found' | null> {
+  const ai = await invokeEnrich({ word }, AI_TIMEOUT_MS)
+  if (!ai) return null
+  const mapped = mapAiResult(ai, word)
+  if (mapped && mapped !== 'not-found' && !mapped.meaningHi) {
+    mapped.meaningHi = compactText(await translateToHindi(mapped.meaning))
+  }
+  return mapped
+}
+
+export async function enrichFromWiktionary(rawWord: string): Promise<WordEnrichment> {
   const trimmed = rawWord.trim().replace(/\s+/g, ' ')
   if (!trimmed) throw new Error('Enter a word first.')
 
-  const ai = await enrichWithAi(trimmed)
-  if (ai && ai !== 'not-found') return ai
-
-  try {
-    return await enrichWithFreeDictionaries(trimmed)
-  } catch (err) {
-    if (ai === 'not-found') {
-      throw new Error(
-        `“${trimmed}” doesn’t look like an English word. Check the spelling or enter details manually.`,
-      )
-    }
-    throw err
-  }
-}
-
-async function enrichWithFreeDictionaries(trimmed: string): Promise<WordEnrichment> {
   const normalizedKey = trimmed.toLowerCase()
-
-  const [wiktionary, datamuse, wikipedia] = await Promise.all([
-    fetchWiktionary(normalizedKey),
-    fetchDatamuse(normalizedKey),
-    fetchWikipedia(trimmed),
-  ])
-
-  let candidate = pickBest(
-    [wiktionary, datamuse, wikipedia].filter((c): c is DefinitionCandidate => Boolean(c)),
-  )
-
+  let candidate = await fetchWiktionary(normalizedKey)
   if (!candidate && trimmed !== normalizedKey) {
-    candidate = pickBest(
-      (await Promise.all([fetchWiktionary(trimmed), fetchWikipedia(trimmed)])).filter(
-        (c): c is DefinitionCandidate => Boolean(c),
-      ),
-    )
+    candidate = await fetchWiktionary(trimmed)
   }
 
   if (!candidate) {
     throw new Error(
-      `Couldn’t find “${trimmed}” in online dictionaries. Check the spelling or enter details manually.`,
+      `Couldn’t find “${trimmed}” in Wiktionary. Try AI, or enter details manually.`,
     )
   }
 
-  const phonetic = candidate.phonetic || datamuse?.phonetic || ''
-
-  const examples = ensureTwoExamples(
-    candidate.word,
-    candidate.pos,
-    candidate.definition,
-    candidate.synonyms,
-    candidate.examples,
-  )
+  const realExamples = candidate.examples
+    .map((ex) => compactText(ex))
+    .filter(Boolean)
+    .slice(0, 2)
 
   let meaningHi = ''
   try {
@@ -486,16 +391,21 @@ async function enrichWithFreeDictionaries(trimmed: string): Promise<WordEnrichme
     }
   } catch {}
 
-  if (!meaningHi) {
-    meaningHi = 'हिंदी अर्थ अभी उपलब्ध नहीं है'
-  }
-
   return {
     word: compactText(candidate.word || trimmed),
     meaning: compactText(candidate.definition),
     meaningHi: compactText(meaningHi),
-    examples: [compactText(examples[0]), compactText(examples[1])],
-    phonetic: compactText(phonetic),
+    examples: [realExamples[0] ?? '', realExamples[1] ?? ''],
+    phonetic: compactText(candidate.phonetic),
     partOfSpeech: compactText(candidate.pos),
+    source: 'dictionary',
   }
+}
+
+/**
+ * Fast Look up: Wiktionary only. Does not call Gemini.
+ * (A cache-only peek needs the updated `enrich` Edge Function deployed.)
+ */
+export async function enrichWord(rawWord: string): Promise<WordEnrichment> {
+  return enrichFromWiktionary(rawWord)
 }

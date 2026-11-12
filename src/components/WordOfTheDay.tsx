@@ -3,6 +3,7 @@ import { addWordToStore, findWordByName } from '../hooks/useVocab'
 import { compactText, enrichWord } from '../lib/enrich'
 import { pickWordOfTheDay, todayKey } from '../lib/wotd'
 import type { WordEnrichment } from '../types'
+import { ScratchReveal } from './ScratchReveal'
 
 type Status = 'pending' | 'added' | 'skipped'
 
@@ -10,6 +11,7 @@ type Stored = {
   date: string
   word: string
   status: Status
+  scratched?: boolean
 }
 
 function storageKey(userId: string) {
@@ -42,6 +44,7 @@ export function WordOfTheDay({ userId }: { userId: string }) {
   const [card, setCard] = useState<Stored | null>(null)
   const [enrichment, setEnrichment] = useState<WordEnrichment | null>(null)
   const [revealed, setRevealed] = useState(false)
+  const [meaningShown, setMeaningShown] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -66,7 +69,8 @@ export function WordOfTheDay({ userId }: { userId: string }) {
 
     if (!stored || stored.date !== date) writeStored(userId, next)
     setCard(next)
-    setRevealed(false)
+    setRevealed(Boolean(next.scratched))
+    setMeaningShown(false)
     setError(null)
 
     if (next.status !== 'pending') {
@@ -100,9 +104,18 @@ export function WordOfTheDay({ userId }: { userId: string }) {
 
   if (!card || card.status !== 'pending') return null
 
+  function markRevealed() {
+    if (!card) return
+    setRevealed(true)
+    setMeaningShown(false)
+    const next = { ...card, scratched: true }
+    setCard(next)
+    writeStored(userId, next)
+  }
+
   function finish(status: Status) {
     if (!card) return
-    const next: Stored = { date: card.date, word: card.word, status }
+    const next: Stored = { ...card, status }
     writeStored(userId, next)
     setCard(next)
   }
@@ -141,53 +154,73 @@ export function WordOfTheDay({ userId }: { userId: string }) {
 
   return (
     <section className="wotd" aria-label="Word of the day">
-      <p className="eyebrow">Word of the day</p>
-      <button
-        type="button"
-        className={`wotd-word${revealed ? ' is-on' : ''}`}
-        onClick={() => setRevealed((v) => !v)}
-        aria-expanded={revealed}
-        disabled={loading}
-      >
-        <span className="mark">{title}</span>
-      </button>
-      {enrichment?.phonetic && <p className="muted">{enrichment.phonetic}</p>}
+      <p className="eyebrow">Word of the day · scratch to reveal</p>
 
-      {loading && (
-        <div className="lookup-status">
-          <span className="spinner" /> Fetching today’s meaning…
-        </div>
+      <ScratchReveal revealed={revealed} onReveal={markRevealed} coverPill="Word of the day">
+        <span className="scratch-kicker">Today’s professional word</span>
+        {revealed ? (
+          <button
+            type="button"
+            className="wotd-word scratch-word"
+            onClick={() => setMeaningShown((v) => !v)}
+            aria-expanded={meaningShown}
+            title={meaningShown ? 'Hide meaning' : 'Tap to reveal the meaning'}
+          >
+            <span className="mark">{title}</span>
+          </button>
+        ) : (
+          <div className="wotd-word scratch-word">
+            <span className="mark">{title}</span>
+          </div>
+        )}
+        {(enrichment?.phonetic || enrichment?.partOfSpeech) && (
+          <p className="muted scratch-meta">
+            {[enrichment?.partOfSpeech, enrichment?.phonetic].filter(Boolean).join(' · ')}
+          </p>
+        )}
+
+        {meaningShown && loading && (
+          <div className="lookup-status">
+            <span className="spinner" /> Fetching today’s meaning…
+          </div>
+        )}
+
+        {meaningShown && enrichment && (
+          <div className="meaning-reveal">
+            {enrichment.meaning && <div className="word-meaning">{enrichment.meaning}</div>}
+            {enrichment.meaningHi && <div className="word-meaning hindi-text">{enrichment.meaningHi}</div>}
+            {examples.map((ex, i) => (
+              <p key={i} className="sentence">
+                “{ex}”
+              </p>
+            ))}
+          </div>
+        )}
+      </ScratchReveal>
+
+      {revealed && (
+        <p className="muted tap-hint">
+          {meaningShown ? 'Tap the word again to hide the meaning.' : 'Tap the word to reveal its meaning.'}
+        </p>
       )}
 
       {error && !enrichment && <div className="form-error">{error}</div>}
 
-      {revealed && enrichment && (
-        <div className="meaning-reveal">
-          {enrichment.meaning && <div className="word-meaning">{enrichment.meaning}</div>}
-          {enrichment.meaningHi && <div className="word-meaning hindi-text">{enrichment.meaningHi}</div>}
-          {examples.map((ex, i) => (
-            <p key={i} className="sentence">
-              “{ex}”
-            </p>
-          ))}
+      {revealed && (
+        <div className="wotd-actions">
+          <button className="btn btn-ghost" type="button" onClick={() => finish('skipped')} disabled={busy}>
+            Skip today
+          </button>
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={onAdd}
+            disabled={busy || loading || !enrichment?.meaning}
+          >
+            Add to my words
+          </button>
         </div>
       )}
-
-      {!revealed && !loading && <p className="muted tap-hint">Tap the word to peek</p>}
-
-      <div className="wotd-actions">
-        <button className="btn btn-ghost" type="button" onClick={() => finish('skipped')} disabled={busy}>
-          Skip today
-        </button>
-        <button
-          className="btn btn-primary"
-          type="button"
-          onClick={onAdd}
-          disabled={busy || loading || !enrichment?.meaning}
-        >
-          Add to my words
-        </button>
-      </div>
     </section>
   )
 }

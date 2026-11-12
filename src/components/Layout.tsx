@@ -1,11 +1,15 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useCallback, useEffect, useState, type MouseEvent } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShares } from '../hooks/useShares'
 import { useVocab } from '../hooks/useVocab'
+import { playZModeStinger, primeZModeStinger, stopZModeStinger } from '../lib/zmodeEntryAudio'
 import { AccountMenu } from './AccountMenu'
 import { BookIcon, CardsIcon, HomeIcon, InboxIcon, PlusIcon } from './Icons'
 import { LegacyImportBanner } from './LegacyImportBanner'
+import { NotifyPrompt } from './NotifyPrompt'
 import { PwaUpdateToast } from './PwaUpdateToast'
 import { ThemePicker } from './ThemePicker'
+import { ZModeEntry } from './ZModeEntry'
 
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null
@@ -16,6 +20,35 @@ export function Layout() {
   const { dueWords } = useVocab()
   const { inbox, available } = useShares()
   const inboxCount = available ? inbox.length : 0
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [zEntry, setZEntry] = useState(false)
+
+  useEffect(() => {
+    primeZModeStinger()
+  }, [])
+
+  const enterZMode = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    event.preventDefault()
+    if (zEntry) return
+    playZModeStinger()
+    setZEntry(true)
+    void import('../pages/ZMode')
+  }
+
+  const arriveZMode = useCallback(() => {
+    if (location.pathname !== '/z') navigate('/z')
+  }, [location.pathname, navigate])
+
+  const finishZMode = useCallback(
+    (skipped: boolean) => {
+      if (skipped) stopZModeStinger()
+      setZEntry(false)
+      if (location.pathname !== '/z') navigate('/z')
+    },
+    [location.pathname, navigate],
+  )
 
   const items = [
     { to: '/', label: 'Home', icon: HomeIcon, end: true, badge: 0 },
@@ -43,11 +76,22 @@ export function Layout() {
         </nav>
 
         <div className="topnav-right">
+          <NavLink to="/z" className="z-nav-btn" aria-label="Z-mode" onClick={enterZMode}>
+            <span className="z-nav-lip" aria-hidden="true" />
+            <span className="z-nav-face">
+              <span className="z-nav-eq" aria-hidden="true" />
+              <span className="z-nav-word">
+                <span className="z-nav-z">Z</span>
+                <span className="z-nav-mode">-mode</span>
+              </span>
+            </span>
+          </NavLink>
           <ThemePicker />
           <AccountMenu />
         </div>
       </header>
 
+      <NotifyPrompt />
       <LegacyImportBanner />
       <main className="page">
         <Outlet />
@@ -67,6 +111,7 @@ export function Layout() {
       </nav>
 
       <PwaUpdateToast />
+      {zEntry && <ZModeEntry onArrive={arriveZMode} onDone={finishZMode} />}
     </div>
   )
 }

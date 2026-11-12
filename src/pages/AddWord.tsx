@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AutoTextarea } from '../components/AutoTextarea'
 import { LIMITS, useVocab } from '../hooks/useVocab'
-import { enrichWord } from '../lib/enrich'
-import type { WordEnrichment } from '../types'
+import { enrichWithAi, enrichWord } from '../lib/enrich'
+import type { EnrichmentSource, WordEnrichment } from '../types'
+
+type LookupKind = 'dict' | 'ai'
 
 export function AddWord() {
   const { words, addWord } = useVocab()
@@ -11,14 +13,16 @@ export function AddWord() {
   const [word, setWord] = useState('')
   const [enrichment, setEnrichment] = useState<WordEnrichment | null>(null)
   const [notes, setNotes] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState<LookupKind | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
-  const [isManual, setIsManual] = useState(false)
   const lookupSeq = useRef(0)
   const navTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => () => window.clearTimeout(navTimer.current), [])
+
+  const isManual = enrichment?.source === 'manual'
+  const busy = loading !== null
 
   function findExisting(value: string) {
     const key = value.trim().toLowerCase()
@@ -27,24 +31,33 @@ export function AddWord() {
 
   const existing = enrichment ? findExisting(enrichment.word) : findExisting(word)
 
-  async function lookup(e?: FormEvent) {
-    e?.preventDefault()
-    if (loading) return
+  function validateQuery(): string | null {
     const q = word.trim().replace(/\s+/g, ' ')
     if (!q) {
       setError('Type a word to look up.')
-      return
+      return null
     }
     if (q.length > 60) {
       setError('That’s too long to look up — try a single word or short phrase.')
-      return
+      return null
     }
+    return q
+  }
+
+  function offlineMessage() {
+    return 'You’re offline, so the meaning can’t be fetched. Fill it in manually or try again once you’re back online.'
+  }
+
+  async function lookup(e?: FormEvent) {
+    e?.preventDefault()
+    if (busy) return
+    const q = validateQuery()
+    if (!q) return
 
     const seq = ++lookupSeq.current
-    setLoading(true)
+    setLoading('dict')
     setError(null)
     setEnrichment(null)
-    setIsManual(false)
 
     try {
       const result = await enrichWord(q)
@@ -54,15 +67,47 @@ export function AddWord() {
     } catch (err) {
       if (seq !== lookupSeq.current) return
       const offline = typeof navigator !== 'undefined' && !navigator.onLine
-      setError(
-        offline
-          ? 'You’re offline, so the meaning can’t be fetched. Fill it in manually or try again once you’re back online.'
-          : err instanceof Error
-            ? err.message
-            : 'Lookup failed.',
-      )
+      setError(offline ? offlineMessage() : err instanceof Error ? err.message : 'Lookup failed.')
     } finally {
-      if (seq === lookupSeq.current) setLoading(false)
+      if (seq === lookupSeq.current) setLoading(null)
+    }
+  }
+
+  async function lookupWithAi() {
+    if (busy) return
+    const q = validateQuery()
+    if (!q) return
+
+    const seq = ++lookupSeq.current
+    setLoading('ai')
+    setError(null)
+
+    try {
+      const result = await enrichWithAi(q)
+      if (seq !== lookupSeq.current) return
+      if (result === 'not-found') {
+        setError(
+          `“${q}” doesn’t look like an English word. Check the spelling or enter details manually.`,
+        )
+        return
+      }
+      if (!result) {
+        const offline = typeof navigator !== 'undefined' && !navigator.onLine
+        setError(
+          offline
+            ? offlineMessage()
+            : 'AI lookup didn’t work. You can save the dictionary card or try again.',
+        )
+        return
+      }
+      setEnrichment(result)
+      setWord(result.word)
+    } catch (err) {
+      if (seq !== lookupSeq.current) return
+      const offline = typeof navigator !== 'undefined' && !navigator.onLine
+      setError(offline ? offlineMessage() : err instanceof Error ? err.message : 'AI lookup failed.')
+    } finally {
+      if (seq === lookupSeq.current) setLoading(null)
     }
   }
 
@@ -79,8 +124,8 @@ export function AddWord() {
       examples: ['', ''],
       phonetic: '',
       partOfSpeech: 'noun',
+      source: 'manual',
     })
-    setIsManual(true)
     setError(null)
   }
 
@@ -91,6 +136,12 @@ export function AddWord() {
     setEnrichment({ ...enrichment, examples })
   }
 
+  function sourceLabel(source?: EnrichmentSource) {
+    if (source === 'ai') return 'AI'
+    if (source === 'manual') return 'Manual entry'
+    return 'Dictionary'
+  }
+
   function onSave(e: FormEvent) {
     e.preventDefault()
     if (!enrichment || saved) return
@@ -98,8 +149,8 @@ export function AddWord() {
     const ex1 = enrichment.examples[0].trim()
     const ex2 = enrichment.examples[1].trim() || ex1
 
-    if (!enrichment.meaning.trim() || !ex1) {
-      setError('Meaning and at least one example sentence are required.')
+    if (!enrichment.meaning.trim()) {
+      setError('Meaning is required.')
       return
     }
 
@@ -126,7 +177,6 @@ export function AddWord() {
     setWord('')
     setEnrichment(null)
     setNotes('')
-    setIsManual(false)
 
     navTimer.current = window.setTimeout(() => {
       setSaved(false)
@@ -134,18 +184,23 @@ export function AddWord() {
     }, 900)
   }
 
+  const canAskAi = Boolean(word.trim())
+
   return (
     <>
       <div className="page-head">
         <p className="eyebrow">New word</p>
         <h1>Catch a word ✍️</h1>
-        <p>Type it — Retain finds the English meaning, Hindi meaning and two example sentences.</p>
+        <p>
+          Look up uses Wiktionary — fast and free. Tap <strong>AI</strong> when you want a richer
+          English + Hindi card.
+        </p>
       </div>
 
       <form className="form" onSubmit={enrichment ? onSave : lookup}>
         <div className="field field-word">
           <label htmlFor="word">Word or phrase</label>
-          <div className="lookup-row">
+          <div className="lookup-stack">
             <input
               id="word"
               value={word}
@@ -153,7 +208,6 @@ export function AddWord() {
                 setWord(e.target.value)
                 setEnrichment(null)
                 setError(null)
-                setIsManual(false)
               }}
               placeholder="e.g. articulate, rizz, serendipity"
               maxLength={LIMITS.word}
@@ -162,21 +216,31 @@ export function AddWord() {
               enterKeyHint="search"
               required
               autoFocus
-              disabled={loading}
+              disabled={busy}
             />
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => lookup()}
-              disabled={loading || !word.trim()}
-            >
-              {loading ? 'Looking up…' : 'Look up'}
-            </button>
+            <div className="lookup-actions">
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => lookup()}
+                disabled={busy || !word.trim()}
+              >
+                {loading === 'dict' ? 'Looking up…' : 'Look up'}
+              </button>
+              <button
+                className="btn btn-pink"
+                type="button"
+                onClick={() => lookupWithAi()}
+                disabled={busy || !canAskAi}
+              >
+                {loading === 'ai' ? 'Asking AI…' : 'AI'}
+              </button>
+            </div>
           </div>
 
           <div className="lookup-hint-row">
-            <span className="hint">Press Look up to auto-fill meaning & examples</span>
-            {!enrichment && !loading && (
+            <span className="hint">Dictionary first. The pink AI button is optional Gemini.</span>
+            {!enrichment && !busy && (
               <button
                 type="button"
                 className="btn-text-action"
@@ -201,26 +265,30 @@ export function AddWord() {
         {error && (
           <div className="form-error">
             <div className="error-text">{error}</div>
-            {!enrichment && word.trim() && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm error-action-btn"
-                onClick={startManualEntry}
-              >
-                Fill details manually instead
-              </button>
-            )}
+            <div className="error-actions">
+              {!enrichment && word.trim() && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm error-action-btn"
+                  onClick={startManualEntry}
+                >
+                  Fill details manually instead
+                </button>
+              )}
+            </div>
           </div>
         )}
 
-        {loading && (
+        {busy && (
           <div className="lookup-status" aria-live="polite">
             <span className="spinner" />
-            Fetching meaning, Hindi translation, and example sentences…
+            {loading === 'ai'
+              ? 'Asking AI for a richer meaning, Hindi, and spoken examples…'
+              : 'Looking up Wiktionary…'}
           </div>
         )}
 
-        {enrichment && !loading && (
+        {enrichment && !busy && (
           <div className="enrich-panel">
             <div className="enrich-meta">
               <label htmlFor="partOfSpeech" className="sr-only">
@@ -244,9 +312,7 @@ export function AddWord() {
               </select>
 
               {enrichment.phonetic && <span className="chip">{enrichment.phonetic}</span>}
-              <span className="chip">
-                {isManual ? 'Manual entry' : 'Auto-filled — edit if you want'}
-              </span>
+              <span className="chip">{sourceLabel(enrichment.source)}</span>
             </div>
 
             <div className="field">
@@ -282,7 +348,6 @@ export function AddWord() {
                 onChange={(e) => updateExample(0, e.target.value)}
                 placeholder="A natural sentence using the word..."
                 maxLength={LIMITS.example}
-                required
               />
             </div>
 
@@ -313,10 +378,18 @@ export function AddWord() {
                 Save it
               </button>
               <button
+                className="btn btn-pink"
+                type="button"
+                onClick={() => lookupWithAi()}
+                disabled={busy || !canAskAi}
+              >
+                {loading === 'ai' ? 'Asking AI…' : 'AI'}
+              </button>
+              <button
                 className="btn btn-ghost"
                 type="button"
                 onClick={() => lookup()}
-                disabled={loading}
+                disabled={busy}
               >
                 Look up again
               </button>

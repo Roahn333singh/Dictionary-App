@@ -1,75 +1,135 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AvatarFace } from '../components/AvatarFace'
+import { ScratchReveal } from '../components/ScratchReveal'
 import { acceptShare, dismissShare, refreshShares, useShares } from '../hooks/useShares'
 import { findWordByName } from '../hooks/useVocab'
 import type { Share } from '../lib/cloud'
 
-function ShareCard({ share, from }: { share: Share; from: string }) {
-  const [revealed, setRevealed] = useState(false)
+function scratchedKey(userId: string | null) {
+  return `retain-scratched-shares:${userId ?? 'anon'}`
+}
+
+function readScratched(userId: string | null): Set<string> {
+  try {
+    const raw = localStorage.getItem(scratchedKey(userId))
+    const parsed = raw ? (JSON.parse(raw) as unknown) : []
+    return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function rememberScratched(userId: string | null, id: string) {
+  try {
+    const next = readScratched(userId)
+    next.add(id)
+    localStorage.setItem(scratchedKey(userId), JSON.stringify([...next].slice(-200)))
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function ShareCard({
+  share,
+  from,
+  fromAvatar,
+  userId,
+}: {
+  share: Share
+  from: string
+  fromAvatar?: string
+  userId: string | null
+}) {
+  const [scratched, setScratched] = useState(() => readScratched(userId).has(share.id))
+  const [meaningShown, setMeaningShown] = useState(false)
   const alreadyHave = Boolean(findWordByName(share.word))
   const p = share.payload
   const examples = p.examples.filter(Boolean)
 
+  function markScratched() {
+    setScratched(true)
+    setMeaningShown(false)
+    rememberScratched(userId, share.id)
+  }
+
   return (
     <article className="share-card">
       <div className="share-from">
-        <span className="friend-avatar" aria-hidden>
-          {from.charAt(0).toUpperCase()}
-        </span>
+        <AvatarFace avatarId={fromAvatar} name={from} size="sm" />
         <span>
-          <strong>{from}</strong> sent you
+          <strong>{from}</strong> sent you a word
         </span>
       </div>
-
-      <button
-        type="button"
-        className="share-word"
-        onClick={() => setRevealed((v) => !v)}
-        aria-expanded={revealed}
-        title={revealed ? 'Hide meaning' : 'Reveal meaning'}
-      >
-        <span className="mark">{share.word}</span>
-      </button>
 
       {share.note && <p className="share-note">“{share.note}”</p>}
 
-      {revealed && (
-        <div className="meaning-reveal">
-          {p.meaning && <div className="word-meaning">{p.meaning}</div>}
-          {p.meaningHi && <div className="word-meaning hindi-text">{p.meaningHi}</div>}
-          {examples.map((ex, i) => (
-            <p key={i} className="sentence">“{ex}”</p>
-          ))}
-        </div>
-      )}
+      <ScratchReveal revealed={scratched} onReveal={markScratched} coverPill={`From ${from}`} compact>
+        <span className="scratch-kicker">A word from {from}</span>
+        {scratched ? (
+          <button
+            type="button"
+            className="share-word"
+            onClick={() => setMeaningShown((v) => !v)}
+            aria-expanded={meaningShown}
+            title={meaningShown ? 'Hide meaning' : 'Tap to reveal the meaning'}
+          >
+            <span className="mark">{share.word}</span>
+          </button>
+        ) : (
+          <div className="share-word">
+            <span className="mark">{share.word}</span>
+          </div>
+        )}
+        {(p.partOfSpeech || p.phonetic) && (
+          <p className="muted scratch-meta">{[p.partOfSpeech, p.phonetic].filter(Boolean).join(' · ')}</p>
+        )}
 
-      <div className="share-actions">
-        <button className="btn btn-primary btn-sm" type="button" onClick={() => acceptShare(share)}>
-          {alreadyHave ? 'Got it already ✓' : 'Add to my words'}
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => dismissShare(share)}>
-          Skip
-        </button>
-      </div>
+        {meaningShown && (
+          <div className="meaning-reveal">
+            {p.meaning && <div className="word-meaning">{p.meaning}</div>}
+            {p.meaningHi && <div className="word-meaning hindi-text">{p.meaningHi}</div>}
+            {examples.map((ex, i) => (
+              <p key={i} className="sentence">“{ex}”</p>
+            ))}
+          </div>
+        )}
+      </ScratchReveal>
+
+      {scratched && (
+        <>
+          <p className="muted tap-hint">
+            {meaningShown ? 'Tap the word again to hide the meaning.' : 'Tap the word to reveal its meaning.'}
+          </p>
+          <div className="share-actions">
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => acceptShare(share)}>
+              {alreadyHave ? 'Got it already ✓' : 'Add to my words'}
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => dismissShare(share)}>
+              Skip
+            </button>
+          </div>
+        </>
+      )}
     </article>
   )
 }
 
 export function Inbox() {
-  const { inbox, friends, loaded, available } = useShares()
+  const { inbox, friends, loaded, available, userId } = useShares()
 
   useEffect(() => {
     void refreshShares()
   }, [])
 
-  const nameOf = (id: string) => friends.find((f) => f.userId === id)?.name ?? 'A friend'
+  const friendOf = (id: string) => friends.find((f) => f.userId === id)
 
   return (
     <>
       <div className="page-head">
         <p className="eyebrow">From your friends</p>
         <h1>Inbox</h1>
-        <p>Words your friends think you should know. Tap one to peek.</p>
+        <p>Words your friends think you should know. Scratch one to reveal it.</p>
       </div>
 
       {!available ? (
@@ -92,9 +152,18 @@ export function Inbox() {
         </div>
       ) : (
         <div className="inbox-list">
-          {inbox.map((share) => (
-            <ShareCard key={share.id} share={share} from={nameOf(share.fromUser)} />
-          ))}
+          {inbox.map((share) => {
+            const friend = friendOf(share.fromUser)
+            return (
+              <ShareCard
+                key={share.id}
+                share={share}
+                from={friend?.name ?? 'A friend'}
+                fromAvatar={friend?.avatarId}
+                userId={userId}
+              />
+            )
+          })}
         </div>
       )}
     </>

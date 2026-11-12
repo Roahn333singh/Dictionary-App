@@ -1,19 +1,27 @@
 import { useSyncExternalStore } from 'react'
 import {
+  fetchFriendRequests,
   fetchFriends,
   fetchInbox,
+  respondFriendRequest,
+  sendFriendRequest,
   sendShare,
   setShareStatus,
   type Friend,
+  type FriendInviteResult,
+  type FriendRequest,
   type SendResult,
   type Share,
 } from '../lib/cloud'
+import { syncAppBadge, syncPushSubscription } from '../lib/push'
+import { supabase } from '../lib/supabase'
 import type { VocabWord } from '../types'
 import { addWordToStore, findWordByName } from './useVocab'
 
 type SharesState = {
   userId: string | null
   friends: Friend[]
+  requests: FriendRequest[]
   inbox: Share[]
   loaded: boolean
   /** false when the sharing tables are not set up in Supabase yet */
@@ -22,7 +30,14 @@ type SharesState = {
 
 const POLL_MS = 45_000
 
-let state: SharesState = { userId: null, friends: [], inbox: [], loaded: false, available: true }
+let state: SharesState = {
+  userId: null,
+  friends: [],
+  requests: [],
+  inbox: [],
+  loaded: false,
+  available: true,
+}
 const listeners = new Set<() => void>()
 /** shares handled on this device whose status update has not reached the server yet */
 const pendingStatus = new Map<string, 'added' | 'dismissed'>()
@@ -31,7 +46,32 @@ let refreshing: Promise<void> | null = null
 
 function set(patch: Partial<SharesState>) {
   state = { ...state, ...patch }
+  if ('inbox' in patch || 'available' in patch) {
+    syncAppBadge(state.available ? state.inbox.length : 0)
+  }
   listeners.forEach((l) => l())
+}
+
+let inboxChannel: { unsubscribe: () => Promise<unknown> } | null = null
+
+function stopInboxListener() {
+  void inboxChannel?.unsubscribe()
+  inboxChannel = null
+}
+
+function listenForInbox(userId: string) {
+  stopInboxListener()
+  if (!supabase) return
+  inboxChannel = supabase
+    .channel(`inbox-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'shares', filter: `to_user=eq.${userId}` },
+      () => {
+        void refreshShares()
+      },
+    )
+    .subscribe()
 }
 
 function isMissingTable(err: unknown) {
@@ -57,10 +97,19 @@ export function refreshShares(): Promise<void> {
   refreshing = (async () => {
     try {
       await flushPendingStatus()
-      const [friends, inbox] = await Promise.all([fetchFriends(userId), fetchInbox(userId)])
+      const [friends, requests, inbox] = await Promise.all([
+        fetchFriends(userId),
+        fetchFriendRequests().catch((err) => {
+          // Older projects without friends.sql still load shares.
+          if (isMissingTable(err)) return [] as FriendRequest[]
+          throw err
+        }),
+        fetchInbox(userId),
+      ])
       if (state.userId !== userId) return
       set({
         friends,
+        requests,
         inbox: inbox.filter((s) => !pendingStatus.has(s.id)),
         loaded: true,
         available: true,
@@ -78,12 +127,19 @@ export function refreshShares(): Promise<void> {
 
 export function setShareUser(userId: string | null) {
   if (state.userId === userId) return
+  const previous = state.userId
   window.clearInterval(pollTimer)
+  stopInboxListener()
   pendingStatus.clear()
-  state = { userId, friends: [], inbox: [], loaded: false, available: true }
+  state = { userId, friends: [], requests: [], inbox: [], loaded: false, available: true }
   listeners.forEach((l) => l())
-  if (!userId) return
+  if (!userId) {
+    if (previous) syncAppBadge(0)
+    return
+  }
+  void syncPushSubscription()
   void refreshShares()
+  listenForInbox(userId)
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'visible') void refreshShares()
   }, POLL_MS)
@@ -91,10 +147,27 @@ export function setShareUser(userId: string | null) {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.userId) void refreshShares()
+    if (document.visibilityState === 'visible' && state.userId) {
+      void syncPushSubscription()
+      void refreshShares()
+    }
   })
   window.addEventListener('online', () => {
     if (state.userId) void refreshShares()
+  })
+}
+
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const data = event.data as { type?: string; url?: string; badgeCount?: number } | null
+    if (!data || typeof data !== 'object') return
+    if (data.type === 'shares-changed') {
+      if (typeof data.badgeCount === 'number') syncAppBadge(data.badgeCount)
+      if (state.userId) void refreshShares()
+    }
+    if (data.type === 'navigate' && typeof data.url === 'string' && data.url.startsWith('/')) {
+      if (`${window.location.pathname}${window.location.search}` !== data.url) window.location.assign(data.url)
+    }
   })
 }
 
@@ -137,6 +210,20 @@ export async function shareWord(word: VocabWord, toUserIds: string[], note: stri
   if (!userId) throw new Error('Sign in to share words.')
   if (toUserIds.length === 0) throw new Error('Pick at least one friend.')
   return sendShare(word, toUserIds, userId, note)
+}
+
+export async function inviteFriendByEmail(email: string): Promise<FriendInviteResult> {
+  if (!state.userId) throw new Error('Sign in to invite friends.')
+  const result = await sendFriendRequest(email)
+  if (result.ok) await refreshShares()
+  return result
+}
+
+export async function answerFriendInvite(id: string, accept: boolean): Promise<FriendInviteResult> {
+  if (!state.userId) throw new Error('Sign in first.')
+  const result = await respondFriendRequest(id, accept)
+  if (result.ok) await refreshShares()
+  return result
 }
 
 function subscribe(listener: () => void) {

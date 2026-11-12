@@ -1,7 +1,8 @@
 -- Retain: word sharing between friends.
 -- Run once in Supabase → SQL Editor → New query → Run. Safe to re-run.
 
--- Public names so friends can pick each other when sharing.
+-- Usernames. A signed-in person can read only their own row.
+-- Friend names are returned by list_friends for that caller, not by listing this table.
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
   name text not null unique,
@@ -11,28 +12,40 @@ create table if not exists public.profiles (
 alter table public.profiles enable row level security;
 
 drop policy if exists "profiles_read_signed_in" on public.profiles;
-create policy "profiles_read_signed_in" on public.profiles
-  for select to authenticated using (true);
+drop policy if exists "profiles_select_own" on public.profiles;
+create policy "profiles_select_own" on public.profiles
+  for select to authenticated using (user_id = auth.uid());
 
--- Create a profile for every new account. Never blocks sign-up.
+-- Create a profile for every new account.
+-- A taken username fails the signup. Other profile errors must not.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  desired text := lower(trim(coalesce(
+    nullif(new.raw_user_meta_data ->> 'display_name', ''),
+    split_part(coalesce(new.email, ''), '@', 1)
+  )));
 begin
   insert into public.profiles (user_id, name)
-  values (
-    new.id,
-    coalesce(nullif(new.raw_user_meta_data ->> 'display_name', ''), split_part(new.email, '@', 1))
-  )
-  on conflict do nothing;
+  values (new.id, desired)
+  on conflict (user_id) do nothing;
   return new;
-exception when others then
-  return new;
+exception
+  when unique_violation then
+    raise exception 'username_taken' using errcode = '23505';
+  when check_violation then
+    raise exception 'username_invalid' using errcode = '23514';
+  when others then
+    return new;
 end;
 $$;
+
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+grant execute on function public.handle_new_user() to supabase_auth_admin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { WordCard } from '../components/WordCard'
 import { WordOfTheDay } from '../components/WordOfTheDay'
-import { useAuth } from '../hooks/useAuth'
+import { accountUsername, useAuth } from '../hooks/useAuth'
 import { useShares } from '../hooks/useShares'
 import { useVocab } from '../hooks/useVocab'
 
@@ -18,8 +18,7 @@ export function Home() {
   const { inbox, friends, available } = useShares()
   const { session } = useAuth()
   const recent = words.slice(0, 5)
-  const meta = (session?.user.user_metadata ?? {}) as { display_name?: string }
-  const name = meta.display_name || session?.user.email?.split('@')[0] || ''
+  const name = accountUsername(session?.user)
 
   const senders = [...new Set(inbox.map((s) => friends.find((f) => f.userId === s.fromUser)?.name ?? 'A friend'))]
 

@@ -1,0 +1,708 @@
+/* Z-mode entry. Timing follows zmode_entry.mp4 (12.0s):
+   0.0 page hold + rising whoosh
+   0.7 chromatic hit
+   1.2 accent wash
+   1.5 shatter + wireframe Z
+   2.6 warp into the grid
+   3.5 letter tiles
+   4.4 Z slam
+   5.2 status card, lines through 8.4
+   9.0 Z-MODE ENGAGED
+   11.5 puzzle underneath, fade out by 12.0
+   Colors come from the active theme tokens. */
+
+.z-entry {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--ink);
+  pointer-events: auto;
+  animation: z-entry-out 12s linear forwards;
+}
+
+.z-entry-vignette,
+.z-entry-glitch,
+.z-entry-wash,
+.z-entry-scrim,
+.z-entry-dust,
+.z-entry-shards,
+.z-entry-warp,
+.z-entry-horizon,
+.z-entry-tiles,
+.z-entry-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.z-entry-vignette {
+  background: radial-gradient(
+    ellipse at center,
+    transparent 42%,
+    color-mix(in srgb, var(--bg) 72%, black) 100%
+  );
+  opacity: 0;
+  animation: z-vignette 0.7s ease forwards;
+}
+
+.z-entry-glitch {
+  opacity: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0 7px,
+    color-mix(in srgb, var(--accent) 55%, transparent) 7px 8px,
+    transparent 8px 14px,
+    color-mix(in srgb, var(--pink) 40%, transparent) 14px 15px
+  );
+  mix-blend-mode: normal;
+  animation:
+    z-glitch-hit 0.28s steps(2, end) 0.72s 1,
+    z-glitch-hit 0.24s steps(2, end) 1.22s 1,
+    z-glitch-hit 0.2s steps(2, end) 2.95s 1,
+    z-glitch-hit 0.22s steps(2, end) 4.72s 1,
+    z-glitch-hit 0.34s steps(2, end) 8.95s 1;
+}
+
+.z-entry-wash {
+  background: var(--accent);
+  opacity: 0;
+  animation: z-wash 0.48s ease 1.16s 1;
+}
+
+.z-entry-scrim {
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--bg-dot) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+  opacity: 0;
+  animation: z-scrim 0.28s linear 1.42s forwards;
+}
+
+.z-entry-dust {
+  opacity: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 55%, transparent) 1.1px, transparent 1.4px);
+  background-size: 26px 32px;
+  animation: z-dust 6.6s linear 5.1s forwards;
+}
+
+.z-entry-shards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.z-entry-shard {
+  background:
+    linear-gradient(var(--stroke), var(--stroke)) center / 100% 1px no-repeat,
+    linear-gradient(var(--stroke), var(--stroke)) center / 1px 100% no-repeat,
+    var(--card);
+  opacity: 0;
+  animation: z-shard 1.05s cubic-bezier(0.4, 0, 1, 1) calc(1.52s + var(--d, 0s)) forwards;
+}
+
+.z-entry-hero,
+.z-entry-slam {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 46%;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  line-height: 0.78;
+  pointer-events: none;
+  user-select: none;
+  transform: translate(-50%, -50%);
+}
+
+.z-entry-hero {
+  font-size: clamp(8.5rem, 52vw, 17rem);
+  color: transparent;
+  -webkit-text-stroke: 3px var(--ink);
+  paint-order: stroke fill;
+  text-shadow:
+    7px 8px 0 var(--accent),
+    -4px 0 0 color-mix(in srgb, var(--pink) 75%, transparent);
+  opacity: 0;
+  animation: z-hero 1.22s cubic-bezier(0.16, 0.84, 0.32, 1) 1.5s forwards;
+}
+
+.z-entry-warp {
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 22px,
+      color-mix(in srgb, var(--accent) 62%, transparent) 22px 23px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 22px,
+      color-mix(in srgb, var(--ink) 22%, transparent) 22px 23px
+    );
+  mask-image: radial-gradient(ellipse at 50% 46%, black 0%, transparent 70%);
+  opacity: 0;
+  animation: z-warp 1.28s linear 2.62s forwards;
+}
+
+.z-entry-horizon {
+  left: 10%;
+  right: 10%;
+  top: 46%;
+  bottom: auto;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 28px 10px color-mix(in srgb, var(--accent) 42%, transparent);
+  opacity: 0;
+  animation: z-horizon 1.15s ease 2.75s forwards;
+}
+
+.z-entry-tile {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 2.35rem;
+  height: 2.35rem;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1.5px solid var(--stroke);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.05rem;
+  opacity: 0;
+  animation: z-tile 1.6s ease var(--at) forwards;
+}
+
+.z-entry-tile.is-hot {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--edge);
+}
+
+.z-entry-slam {
+  z-index: 4;
+  font-size: clamp(8rem, 46vw, 15rem);
+  color: var(--accent);
+  -webkit-text-stroke: 3px var(--edge);
+  paint-order: stroke fill;
+  text-shadow: 6px 6px 0 var(--edge);
+  opacity: 0;
+  animation: z-entry-pop 0.82s cubic-bezier(0.2, 0.85, 0.2, 1) 4.38s forwards;
+}
+
+.z-entry-field {
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.4rem 0.3rem;
+  padding: 8vh 5vw;
+  align-content: center;
+  justify-items: center;
+  opacity: 0;
+  animation: z-field 2.35s ease 8.95s forwards;
+}
+
+.z-entry-field span {
+  width: 1.65rem;
+  height: 1.65rem;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  color: var(--ink-soft);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.z-entry-field span:nth-child(5n) {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--edge);
+}
+
+.z-entry-card {
+  position: relative;
+  z-index: 5;
+  width: min(28rem, calc(100vw - 2.25rem));
+  padding: 1.15rem 1.2rem 1.15rem;
+  border-radius: var(--r-lg);
+  border: var(--bw) solid var(--stroke);
+  background: var(--card);
+  box-shadow:
+    0 22px 50px color-mix(in srgb, var(--shadow) 28%, transparent),
+    7px 7px 0 var(--edge);
+  opacity: 0;
+  transform: translateY(14px) scale(0.97);
+  animation: z-card 0.42s var(--ease-pop) 5.15s forwards;
+}
+
+.z-entry-mark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(4rem, 18vw, 5.4rem);
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: var(--accent);
+  -webkit-text-stroke: 2px var(--edge);
+  paint-order: stroke fill;
+  text-shadow: 4px 4px 0 var(--edge);
+}
+
+.z-entry-kicker {
+  position: relative;
+  min-height: 1.25em;
+  margin: 0.45rem 0 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.z-entry-kicker-glitch,
+.z-entry-kicker-real {
+  display: block;
+}
+
+.z-entry-kicker-glitch {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  opacity: 0;
+  animation: z-kicker-glitch 0.58s steps(2, end) 5.28s forwards;
+}
+
+.z-entry-kicker-real {
+  opacity: 0;
+  animation: z-fade 0.16s linear 5.88s forwards;
+}
+
+.z-entry-log {
+  list-style: none;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.z-entry-log li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.z-entry-type {
+  display: inline-block;
+  white-space: nowrap;
+  clip-path: inset(0 100% 0 0);
+}
+
+.z-entry-check {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 800;
+  opacity: 0;
+}
+
+.z-entry-engaged {
+  display: inline-block;
+  margin: 0 0 0.65rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  background: transparent;
+  animation: z-engage 0.28s ease 9.02s forwards;
+}
+
+.z-entry-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--stroke);
+  background: var(--card-2);
+  overflow: visible;
+}
+
+.z-entry-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 72%, white)
+  );
+  animation: z-bar 3.55s linear 5.55s forwards;
+}
+
+.z-entry-spark {
+  position: absolute;
+  left: var(--x);
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--on-accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.4);
+  animation: z-spark 0.42s ease-out var(--at) forwards;
+}
+
+.z-entry-skip {
+  position: absolute;
+  z-index: 6;
+  right: max(0.85rem, env(safe-area-inset-right));
+  bottom: max(0.95rem, env(safe-area-inset-bottom));
+  border: var(--bw) solid var(--edge);
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 0.48rem 0.95rem;
+  box-shadow: 3px 3px 0 var(--edge);
+  cursor: pointer;
+}
+
+.z-entry-skip:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--edge);
+}
+
+html.z-entry-live .app-shell {
+  animation:
+    z-ui-hit 0.32s steps(2, end) 0.72s 1,
+    z-ui-hit 0.26s steps(2, end) 1.26s 1;
+}
+
+@keyframes z-entry-out {
+  0%,
+  96% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes z-vignette {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes z-glitch-hit {
+  0% {
+    opacity: 0;
+    transform: none;
+  }
+  30% {
+    opacity: 0.85;
+    transform: translateX(-7px);
+  }
+  65% {
+    opacity: 0.7;
+    transform: translateX(6px);
+  }
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+@keyframes z-wash {
+  0% {
+    opacity: 0;
+  }
+  28% {
+    opacity: 0.62;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes z-scrim {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes z-dust {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  80% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes z-shard {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
+  }
+}
+
+@keyframes z-hero {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.32) rotate(-9deg);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05) rotate(0deg);
+  }
+  58% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(4.4);
+  }
+}
+
+@keyframes z-warp {
+  0% {
+    opacity: 0;
+    background-position: 0 0, 0 0;
+    transform: scale(0.55);
+  }
+  14% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    background-position: 0 320px, 40px 0;
+    transform: scale(1.45);
+  }
+}
+
+@keyframes z-horizon {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.15);
+  }
+  22% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  70% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes z-tile {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) rotate(var(--r)) scale(0.82);
+  }
+  28% {
+    opacity: 1;
+    transform: translateY(0) rotate(var(--r)) scale(1);
+  }
+  68% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px) rotate(var(--r)) scale(0.9);
+  }
+}
+
+@keyframes z-entry-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.9) rotate(-7deg);
+  }
+  36% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.94) rotate(0deg);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.78);
+  }
+}
+
+@keyframes z-field {
+  0% {
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes z-card {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes z-kicker-glitch {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes z-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes z-line-open {
+  to {
+    max-height: 1.7em;
+    opacity: 1;
+  }
+}
+
+@keyframes z-type {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes z-check {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes z-engage {
+  to {
+    color: var(--on-accent);
+    background: var(--accent);
+  }
+}
+
+@keyframes z-bar {
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes z-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.7);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+}
+
+@keyframes z-ui-hit {
+  0% {
+    transform: none;
+  }
+  35% {
+    transform: translate(-5px, 2px);
+  }
+  70% {
+    transform: translate(4px, -2px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .z-entry-card {
+    padding: 1rem 0.9rem 1rem;
+  }
+
+  .z-entry-log {
+    font-size: 0.72rem;
+  }
+
+  .z-entry-kicker,
+  .z-entry-engaged {
+    font-size: 0.7rem;
+  }
+
+  .z-entry-tile {
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .z-entry {
+    animation: none;
+    opacity: 0;
+  }
+}
